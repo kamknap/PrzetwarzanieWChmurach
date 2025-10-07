@@ -11,6 +11,7 @@ Projekt realizowany w ramach przedmiotu *Przetwarzanie w Chmurach*.
 |------------|--------------|
 | ☁️ **Chmura** | Microsoft **Azure** |
 | 💻 **Backend** | **Python** + **FastAPI** |
+| 🧠 **Frontend** | **React** + **Vite** |
 | 🗄️ **Baza danych** | **MongoDB** |
 | 🔁 **Automatyzacja CI/CD** | **Jenkins** |
 | 🧱 **Infrastruktura jako kod (IaC)** | **Terraform** / alternatywnie **Azure Container Instances** |
