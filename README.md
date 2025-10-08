@@ -177,8 +177,8 @@ docker-compose down
 
 ## 👥 Zespół projektowy
 
-- 🧑‍💻 **Jan Wąs** - Backend, DevOps
-- 🧑‍💻 **Kamil Knapik** - Frontend, Architecture
+- 🧑‍💻 **Jan Wąs**
+- 🧑‍💻 **Kamil Knapik**
 
 ---
 
