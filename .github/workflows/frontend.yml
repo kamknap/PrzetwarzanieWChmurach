@@ -1,0 +1,72 @@
+name: Frontend CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'frontend/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'frontend/**'
+
+jobs:
+  # Test i build frontendu
+  frontend-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+    
+    - name: Install dependencies
+      working-directory: frontend
+      run: npm ci
+    
+    - name: Run linter
+      working-directory: frontend
+      run: npm run lint
+    
+    - name: Run tests
+      working-directory: frontend
+      run: npm run test
+    
+    - name: Build application
+      working-directory: frontend
+      run: npm run build
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: frontend-build
+        path: frontend/dist/
+
+  # Build Docker image i push do registry
+  frontend-deploy:
+    needs: frontend-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Login to Azure Container Registry
+      uses: azure/docker-login@v1
+      with:
+        login-server: ${{ secrets.ACR_LOGIN_SERVER }}
+        username: ${{ secrets.ACR_USERNAME }}
+        password: ${{ secrets.ACR_PASSWORD }}
+    
+    - name: Build and push Docker image
+      working-directory: frontend
+      run: |
+        docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/movie-rental-frontend:${{ github.sha }} .
+        docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/movie-rental-frontend:latest .
+        docker push ${{ secrets.ACR_LOGIN_SERVER }}/movie-rental-frontend:${{ github.sha }}
+        docker push ${{ secrets.ACR_LOGIN_SERVER }}/movie-rental-frontend:latest

@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  # MongoDB - baza danych dla aplikacji
+  mongodb:
+    image: mongo:7.0
+    container_name: movie-rental-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-password123}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-movie_rental}
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - movie-rental-network
+
+  # Auth Service - serwis uwierzytelniania (FastAPI)
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    container_name: movie-rental-auth
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGO_URL=${MONGO_URL:-mongodb://admin:password123@mongodb:27017/movie_rental?authSource=admin}
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - JWT_EXPIRE_MINUTES=${JWT_EXPIRE_MINUTES:-30}
+    depends_on:
+      - mongodb
+    networks:
+      - movie-rental-network
+    # Odkomentuj gdy serwis będzie gotowy
+    # command: ["echo", "Auth service placeholder - not implemented yet"]
+
+  # Movies Service - serwis katalogu filmów (FastAPI)
+  movies-service:
+    build:
+      context: ./services/movies-service
+      dockerfile: Dockerfile
+    container_name: movie-rental-movies
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      - MONGO_URL=${MONGO_URL:-mongodb://admin:password123@mongodb:27017/movie_rental?authSource=admin}
+      - AUTH_SERVICE_URL=${AUTH_SERVICE_URL:-http://auth-service:8000}
+    depends_on:
+      - mongodb
+      - auth-service
+    networks:
+      - movie-rental-network
+    # Odkomentuj gdy serwis będzie gotowy
+    # command: ["echo", "Movies service placeholder - not implemented yet"]
+
+  # Frontend - React + Vite (development)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: movie-rental-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_AUTH_API=${VITE_AUTH_API:-http://localhost:8000}
+      - VITE_MOVIES_API=${VITE_MOVIES_API:-http://localhost:8001}
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - movie-rental-network
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  movie-rental-network:
+    driver: bridge
+
+# Użycie:
+# docker-compose up -d          # Uruchom wszystkie serwisy w tle
+# docker-compose up frontend    # Uruchom tylko frontend + zależności
+# docker-compose logs -f auth-service  # Pokaż logi serwisu auth
+# docker-compose down           # Zatrzymaj i usuń kontenery
