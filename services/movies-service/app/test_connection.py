@@ -11,6 +11,8 @@ if str(PROJECT_ROOT) not in sys.path:
 from services.shared.database import get_client, get_db, get_collection, ping
 
 
+# w cmd: python services/movies-service/app/test_connection.py
+
 def main() -> None:
     db_name = os.getenv("MONGO_DATABASE") or "Video"
     coll_name = os.getenv("MONGO_COLLECTION") or "Movies"

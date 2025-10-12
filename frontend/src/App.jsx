@@ -1,15 +1,14 @@
-import Hello from './components/Hello'
+import AuthContainer from './components/AuthContainer'
 
 
 export default function App(){
 return (
 <div className="app">
 <header>
-<h1>Moja aplikacja — frontend (React + Vite)</h1>
+<h1>System zarządzania filmami</h1>
 </header>
 <main>
-<Hello />
-<p>To jest prosty tekst — aplikacja działa lokalnie.</p>
+<AuthContainer />
 </main>
 </div>
 )

@@ -8,10 +8,6 @@ from pymongo.database import Database
 
 
 def get_client(uri: Optional[str] = None) -> MongoClient:
-    """Return a configured MongoClient using env or provided uri.
-
-    Reads MONGO_URI or MONGO_URL from environment when uri is not provided.
-    """
     load_dotenv()
     uri = uri or os.getenv("MONGO_URI") or os.getenv("MONGO_URL")
     if not uri:
