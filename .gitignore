@@ -109,3 +109,4 @@ build/
 *.sql
 *.dump
 *.bak
+.env.example
