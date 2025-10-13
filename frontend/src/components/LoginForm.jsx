@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import authService from '../services/authService'
 
 export default function LoginForm({ onLogin, switchToRegister }) {
   const [formData, setFormData] = useState({
@@ -22,14 +23,11 @@ export default function LoginForm({ onLogin, switchToRegister }) {
     setIsLoading(true)
 
     try {
-      // TODO: Wywołanie API do logowania
-      console.log('Logowanie:', formData)
-      
-      // Symulacja wywołania API
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      const result = await authService.login(formData.email, formData.password)
+      console.log('Zalogowano pomyślnie:', result.user)
       
       if (onLogin) {
-        onLogin(formData)
+        onLogin(result)
       }
     } catch (err) {
       setError('Błąd logowania: ' + err.message)

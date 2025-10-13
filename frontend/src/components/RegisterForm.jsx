@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import authService from '../services/authService'
 
 export default function RegisterForm({ onRegister, switchToLogin }) {
   const [formData, setFormData] = useState({
@@ -53,21 +54,12 @@ export default function RegisterForm({ onRegister, switchToLogin }) {
     try {
       // Przygotowanie danych do wysłania (bez confirmPassword)
       const { confirmPassword, ...dataToSend } = formData
-      const registrationData = {
-        ...dataToSend,
-        role: 'user', // domyślna rola
-        registrationDate: new Date().toISOString(),
-        activeRentalsCount: 0
-      }
-
-      // TODO: Wywołanie API do rejestracji
-      console.log('Rejestracja:', registrationData)
       
-      // Symulacja wywołania API
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      const result = await authService.register(dataToSend)
+      console.log('Zarejestrowano pomyślnie:', result.user)
       
       if (onRegister) {
-        onRegister(registrationData)
+        onRegister(result)
       }
     } catch (err) {
       setError('Błąd rejestracji: ' + err.message)
