@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import LoginForm from './LoginForm'
 import RegisterForm from './RegisterForm'
 import authService from '../services/authService'
+import MovieContainer from './MovieContainer'
 
 export default function AuthContainer() {
   const [currentForm, setCurrentForm] = useState('login') // 'login' lub 'register'
@@ -65,12 +66,11 @@ export default function AuthContainer() {
             onClick={handleLogout}
             className="logout-btn"
           >
-            Wyloguj się
+             Wyloguj się
           </button>
         </div>
         <div className="dashboard-content">
-          <p>Jesteś zalogowany do systemu zarządzania filmami.</p>
-          {/* Tu będzie dalsza zawartość aplikacji */}
+          <MovieContainer />
         </div>
       </div>
     )
