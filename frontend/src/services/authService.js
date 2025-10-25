@@ -139,6 +139,145 @@ class AuthService {
 
     return response
   }
+
+  async updateProfile(userData) {
+  if (!this.token) {
+    throw new Error('Brak tokena autoryzacji')
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/update-profile`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${this.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(userData),
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Błąd aktualizacji profilu')
+    }
+
+    const data = await response.json()
+    
+    this.user = data.user
+    localStorage.setItem('user', JSON.stringify(this.user))
+
+    return data.user
+  } catch (error) {
+    console.error('Update profile error:', error)
+    throw error
+  }
+}
+
+async getAllClients() {
+  if (!this.token) {
+    throw new Error('Brak tokena autoryzacji')
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/clients`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${this.token}`,
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Błąd pobierania klientów')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Get clients error:', error)
+    throw error
+  }
+}
+
+async createClient(clientData) {
+  if (!this.token) {
+    throw new Error('Brak tokena autoryzacji')
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/clients`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(clientData),
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Błąd tworzenia klienta')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Create client error:', error)
+    throw error
+  }
+}
+
+async deleteClient(clientId) {
+  if (!this.token) {
+    throw new Error('Brak tokena autoryzacji')
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/clients/${clientId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${this.token}`,
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Błąd usuwania klienta')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Delete client error:', error)
+    throw error
+  }
+}
+
+async updateClient(clientId, clientData) {
+  if (!this.token) {
+    throw new Error('Brak tokena autoryzacji')
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/clients/${clientId}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${this.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(clientData),
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Błąd aktualizacji klienta')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Update client error:', error)
+    throw error
+  }
+}
+
 }
 
 const authService = new AuthService()

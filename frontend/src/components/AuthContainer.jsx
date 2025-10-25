@@ -3,11 +3,17 @@ import LoginForm from './LoginForm'
 import RegisterForm from './RegisterForm'
 import authService from '../services/authService'
 import MovieContainer from './MovieContainer'
+import AccountManagement from './AccountManagement'
+import ClientManagement from './ClientManagement'
 
 export default function AuthContainer() {
   const [currentForm, setCurrentForm] = useState('login') // 'login' lub 'register'
   const [user, setUser] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [showAccountManagement, setShowAccountManagement] = useState(false)
+  const [showClientManagement, setShowClientManagement] = useState(false)
+
+
 
   // Sprawdź czy użytkownik jest już zalogowany przy ładowaniu komponenetu
   useEffect(() => {
@@ -43,6 +49,11 @@ export default function AuthContainer() {
     setUser(null)
   }
 
+  const handleAccountUpdate = (updatedUser) => {
+    setUser(updatedUser)
+  }
+
+
   if (isLoading) {
     return (
       <div className="loading-container">
@@ -51,7 +62,8 @@ export default function AuthContainer() {
     )
   }
 
-  // Jeśli użytkownik jest zalogowany, pokaż dashboard
+  // Jeśli użytkownik zalogowany pokaż dashboard
+
   if (user) {
     return (
       <div className="dashboard">
@@ -59,19 +71,49 @@ export default function AuthContainer() {
           <h2>Witaj, {user.firstName} {user.lastName}!</h2>
           <div className="user-info">
             <p>Email: {user.email}</p>
-            <p>Rola: {user.role}</p>
+            <p>Rola: {user.role === 'admin' ? 'Administrator' : 'Użytkownik'}</p>
             <p>Aktywne wypożyczenia: {user.activeRentalsCount}</p>
           </div>
-          <button 
-            onClick={handleLogout}
-            className="logout-btn"
-          >
-             Wyloguj się
-          </button>
+          <div className="header-actions">
+            {user.role === 'admin' && (
+              <button 
+                onClick={() => setShowClientManagement(true)}
+                className="admin-btn"
+              >
+                Zarządzanie klientami
+              </button>
+            )}
+            <button 
+              onClick={() => setShowAccountManagement(true)}
+              className="action-btn"
+            >
+              Zarządzaj kontem
+            </button>
+            <button 
+              onClick={handleLogout}
+              className="logout-btn"
+            >
+              Wyloguj się
+            </button>
+          </div>
         </div>
         <div className="dashboard-content">
           <MovieContainer />
         </div>
+
+        {showAccountManagement && (
+          <AccountManagement 
+            user={user}
+            onClose={() => setShowAccountManagement(false)}
+            onUpdate={handleAccountUpdate}
+          />
+        )}
+
+        {showClientManagement && (
+          <ClientManagement 
+            onClose={() => setShowClientManagement(false)}
+          />
+        )}
       </div>
     )
   }
