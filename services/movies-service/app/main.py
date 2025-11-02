@@ -58,6 +58,32 @@ class MoviesListResponse(BaseModel):
     per_page: int
     total_pages: int
 
+class MovieCreate(BaseModel):
+    title: str
+    year: int
+    genres: List[str]
+    language: str
+    country: str
+    duration: int
+    description: str
+    director: str
+    rating: float
+    actors: List[str]
+    is_available: bool = True
+
+class MovieUpdate(BaseModel):
+    title: Optional[str] = None
+    year: Optional[int] = None
+    genres: Optional[List[str]] = None
+    language: Optional[str] = None
+    country: Optional[str] = None
+    duration: Optional[int] = None
+    description: Optional[str] = None
+    director: Optional[str] = None
+    rating: Optional[float] = None
+    actors: Optional[List[str]] = None
+    is_available: Optional[bool] = None
+
 # Funkcje pomocnicze
 def get_db_connection():
     client = get_client()
@@ -147,6 +173,34 @@ def movie_to_response(movie_doc) -> MovieResponse:
         print(f"Error converting movie document: {e}")
         print(f"Movie document: {movie_doc}")
         raise
+
+async def require_admin(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Weryfikuje token i sprawdza czy użytkownik jest adminem"""
+    try:
+        headers = {"Authorization": f"Bearer {credentials.credentials}"}
+        response = requests.get(f"{AUTH_SERVICE_URL}/me", headers=headers, timeout=5)
+        
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        user = response.json()
+        
+        if user.get("role") != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access forbidden. Admin role required."
+            )
+        
+        return user
+    except requests.RequestException:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Auth service unavailable"
+        )
 
 # Endpointy
 @app.get("/")
@@ -261,6 +315,124 @@ def health_check():
             "database": "disconnected",
             "error": str(e)
         }
+    
+@app.post("/movies", response_model=MovieResponse)
+async def create_movie(
+    movie_data: MovieCreate,
+    current_user: dict = Depends(require_admin)
+):
+    """Tworzy nowy film (tylko admin)"""
+    db = get_db_connection()
+    
+    # Przygotuj dane filmu
+    new_movie = {
+        "title": movie_data.title,
+        "year": movie_data.year,
+        "genres": movie_data.genres,
+        "language": movie_data.language,
+        "country": movie_data.country,
+        "duration": movie_data.duration,
+        "description": movie_data.description,
+        "director": movie_data.director,
+        "rating": movie_data.rating,
+        "actors": movie_data.actors,
+        "addedDate": datetime.utcnow(),
+        "is_available": movie_data.is_available
+    }
+    
+    result = db.Movies.insert_one(new_movie)
+    new_movie["_id"] = result.inserted_id
+    
+    return movie_to_response(new_movie)
+
+@app.put("/movies/{movie_id}", response_model=MovieResponse)
+async def update_movie(
+    movie_id: str,
+    movie_data: MovieUpdate,
+    current_user: dict = Depends(require_admin)
+):
+    """Aktualizuje film (tylko admin)"""
+    db = get_db_connection()
+    
+    try:
+        object_id = ObjectId(movie_id)
+    except:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid movie ID format"
+        )
+    
+    # Sprawdź czy film istnieje
+    existing_movie = db.Movies.find_one({"_id": object_id})
+    if not existing_movie:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Movie not found"
+        )
+    
+    # Przygotuj dane do aktualizacji
+    update_fields = {}
+    
+    if movie_data.title is not None:
+        update_fields["title"] = movie_data.title
+    if movie_data.year is not None:
+        update_fields["year"] = movie_data.year
+    if movie_data.genres is not None:
+        update_fields["genres"] = movie_data.genres
+    if movie_data.language is not None:
+        update_fields["language"] = movie_data.language
+    if movie_data.country is not None:
+        update_fields["country"] = movie_data.country
+    if movie_data.duration is not None:
+        update_fields["duration"] = movie_data.duration
+    if movie_data.description is not None:
+        update_fields["description"] = movie_data.description
+    if movie_data.director is not None:
+        update_fields["director"] = movie_data.director
+    if movie_data.rating is not None:
+        update_fields["rating"] = movie_data.rating
+    if movie_data.actors is not None:
+        update_fields["actors"] = movie_data.actors
+    if movie_data.is_available is not None:
+        update_fields["is_available"] = movie_data.is_available
+    
+    # Aktualizuj w bazie
+    if update_fields:
+        db.Movies.update_one(
+            {"_id": object_id},
+            {"$set": update_fields}
+        )
+    
+    # Pobierz zaktualizowany film
+    updated_movie = db.Movies.find_one({"_id": object_id})
+    
+    return movie_to_response(updated_movie)
+
+@app.delete("/movies/{movie_id}")
+async def delete_movie(
+    movie_id: str,
+    current_user: dict = Depends(require_admin)
+):
+    """Usuwa film (tylko admin)"""
+    db = get_db_connection()
+    
+    try:
+        object_id = ObjectId(movie_id)
+    except:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid movie ID format"
+        )
+    
+    result = db.Movies.delete_one({"_id": object_id})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Movie not found"
+        )
+    
+    return {"message": "Movie deleted successfully"}
 
 if __name__ == "__main__":
     import uvicorn

@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
-import movieService from '../services/MovieService'
+import movieService from '../services/movieService'
+import MovieManagement from './MovieManagement'
+import MovieEdit from './MovieEdit'
+import authService from '../services/authService'
 
 export default function MovieContainer() {
   const [movies, setMovies] = useState([])
@@ -13,8 +16,14 @@ export default function MovieContainer() {
     year: '',
     search: ''
   })
+  const [showMovieManagement, setShowMovieManagement] = useState(false)
+  const [editingMovie, setEditingMovie] = useState(null)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
+    const user = authService.getUser()
+    setIsAdmin(user?.role === 'admin')
+    
     fetchGenres()
   }, [])
 
@@ -36,19 +45,12 @@ export default function MovieContainer() {
     setError(null)
     
     try {
-      console.log('Fetching movies with params:', {
-        page: currentPage,
-        per_page: 12,
-        ...filters
-      })
-      
       const response = await movieService.getMovies({
         page: currentPage,
         per_page: 12,
         ...filters
       })
       
-      console.log('Movies response:', response)
       setMovies(response.movies)
       setTotalPages(response.total_pages)
     } catch (error) {
@@ -61,11 +63,29 @@ export default function MovieContainer() {
 
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }))
-    setCurrentPage(1) // Reset to first page when filtering
+    setCurrentPage(1)
   }
 
   const handlePageChange = (page) => {
     setCurrentPage(page)
+  }
+
+  const handleDelete = async (movieId, movieTitle) => {
+    if (!confirm(`Czy na pewno chcesz usunąć film "${movieTitle}"?`)) {
+      return
+    }
+
+    try {
+      await movieService.deleteMovie(movieId)
+      setError(null)
+      fetchMovies()
+    } catch (error) {
+      setError('Błąd usuwania filmu: ' + error.message)
+    }
+  }
+
+  const handleEdit = (movie) => {
+    setEditingMovie(movie)
   }
 
   if (loading) {
@@ -87,6 +107,17 @@ export default function MovieContainer() {
 
   return (
     <div className="movie-container">
+      {isAdmin && (
+        <div className="admin-movie-actions">
+          <button 
+            onClick={() => setShowMovieManagement(true)}
+            className="admin-btn"
+          >
+            + Dodaj nowy film
+          </button>
+        </div>
+      )}
+
       <div className="movie-filters">
         <div className="filter-group">
           <input
@@ -154,6 +185,25 @@ export default function MovieContainer() {
                   <span className="unavailable">Niedostępny</span>
                 )}
               </div>
+              
+              {isAdmin && (
+                <div className="movie-admin-actions">
+                  <div className="action-buttons">
+                    <button
+                      onClick={() => handleEdit(movie)}
+                      className="edit-btn"
+                    >
+                      Edytuj
+                    </button>
+                    <button
+                      onClick={() => handleDelete(movie.id, movie.title)}
+                      className="delete-movie-btn"
+                    >
+                      Usuń
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -181,6 +231,21 @@ export default function MovieContainer() {
             Następna
           </button>
         </div>
+      )}
+
+      {showMovieManagement && (
+        <MovieManagement 
+          onClose={() => setShowMovieManagement(false)}
+          onMovieChange={fetchMovies}
+        />
+      )}
+
+      {editingMovie && (
+        <MovieEdit
+          movie={editingMovie}
+          onClose={() => setEditingMovie(null)}
+          onMovieChange={fetchMovies}
+        />
       )}
     </div>
   )

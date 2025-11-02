@@ -81,6 +81,66 @@ class MovieService {
       throw error
     }
   }
+
+  async createMovie(movieData) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/movies`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(movieData)
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Błąd tworzenia filmu')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Error creating movie:', error)
+    throw error
+  }
+}
+
+async updateMovie(movieId, movieData) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/movies/${movieId}`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(movieData)
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Błąd aktualizacji filmu')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Error updating movie:', error)
+    throw error
+  }
+}
+
+async deleteMovie(movieId) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/movies/${movieId}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders()
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Błąd usuwania filmu')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Error deleting movie:', error)
+    throw error
+  }
+}
+
 }
 
 const movieService = new MovieService()
