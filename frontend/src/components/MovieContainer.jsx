@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
-import movieService from '../services/movieService'
+import { useState, useEffect, useMemo } from 'react'
+import { useCallback, useRef } from 'react'
+import movieService from '../services/MovieService'
 import MovieManagement from './MovieManagement'
 import MovieEdit from './MovieEdit'
 import authService from '../services/authService'
@@ -20,55 +21,80 @@ export default function MovieContainer() {
   const [editingMovie, setEditingMovie] = useState(null)
   const [isAdmin, setIsAdmin] = useState(false)
 
-  useEffect(() => {
+  // 🔹 1. Uruchamia się tylko raz — przy starcie aplikacji
+useEffect(() => {
+  const init = async () => {
     const user = authService.getUser()
     setIsAdmin(user?.role === 'admin')
-    
-    fetchGenres()
-  }, [])
 
-  useEffect(() => {
-    fetchMovies()
-  }, [currentPage, filters])
-
-  const fetchGenres = async () => {
     try {
       const response = await movieService.getGenres()
       setGenres(response.genres)
     } catch (error) {
       console.error('Error fetching genres:', error)
     }
+
+    // Po wczytaniu gatunków – pobierz pierwszą listę filmów
+    await fetchMovies()
   }
 
-  const fetchMovies = async () => {
-    setLoading(true)
-    setError(null)
-    
-    try {
-      const response = await movieService.getMovies({
-        page: currentPage,
-        per_page: 12,
-        ...filters
-      })
-      
-      setMovies(response.movies)
-      setTotalPages(response.total_pages)
-    } catch (error) {
-      console.error('Detailed error fetching movies:', error)
-      setError(`Błąd podczas pobierania filmów: ${error.message}`)
-    } finally {
-      setLoading(false)
-    }
+  init()
+}, [])
+
+// 🔹 2. Reaguje na zmiany filtrów lub paginacji — z opóźnieniem (debounce)
+useEffect(() => {
+  const timeoutId = setTimeout(() => {
+    fetchMovies()
+  }, 500) // 0.5 sekundy od ostatniej zmiany
+
+  return () => clearTimeout(timeoutId)
+}, [currentPage, filters])
+
+const fetchMovies = async (page = currentPage, activeFilters = filters) => {
+  setLoading(true)
+  setError(null)
+
+  try {
+    const response = await movieService.getMovies({
+      page,
+      per_page: 12,
+      ...activeFilters
+    })
+
+    setMovies(response.movies)
+    setTotalPages(response.total_pages)
+  } catch (error) {
+    console.error('Detailed error fetching movies:', error)
+    setError(`Błąd podczas pobierania filmów: ${error.message}`)
+  } finally {
+    setLoading(false)
+  }
+}
+
+// reaguje tylko na interakcje użytkownika, nie na każdy render
+const fetchTimeout = useRef(null)
+
+const handleFilterChange = useCallback((key, value) => {
+  const newFilters = { ...filters, [key]: value }
+  setFilters(newFilters)
+  setCurrentPage(1)
+
+  // usuń poprzedni timeout (żeby nie odpytywać przy każdym znaku)
+  if (fetchTimeout.current) {
+    clearTimeout(fetchTimeout.current)
   }
 
-  const handleFilterChange = (key, value) => {
-    setFilters(prev => ({ ...prev, [key]: value }))
-    setCurrentPage(1)
-  }
+  // odczekaj 400 ms po ostatnim wpisaniu
+  fetchTimeout.current = setTimeout(() => {
+    fetchMovies(1, newFilters)
+  }, 400)
+}, [filters])
 
-  const handlePageChange = (page) => {
-    setCurrentPage(page)
-  }
+const handlePageChange = (page) => {
+  setCurrentPage(page)
+  fetchMovies(page, filters)
+}
+
 
   const handleDelete = async (movieId, movieTitle) => {
     if (!confirm(`Czy na pewno chcesz usunąć film "${movieTitle}"?`)) {
@@ -87,6 +113,14 @@ export default function MovieContainer() {
   const handleEdit = (movie) => {
     setEditingMovie(movie)
   }
+
+  // Memoizacja ciężkich obliczeń
+  const processedMovies = useMemo(() => {
+    return movies.map(movie => ({
+      ...movie,
+      // Przetwarzanie danych tylko gdy się zmieniają
+    }))
+  }, [movies])
 
   if (loading) {
     return (
@@ -161,18 +195,23 @@ export default function MovieContainer() {
       </div>
 
       <div className="movies-grid">
-        {movies.map(movie => (
+        {processedMovies.map(movie => (
           <div key={movie.id} className="movie-card">
             <div className="movie-info">
               <h3 className="movie-title">{movie.title}</h3>
               <p className="movie-year">{movie.year}</p>
               <p className="movie-director">Reżyseria: {movie.director}</p>
               <p className="movie-duration">{movie.duration} min</p>
+              
               <div className="movie-genres">
-                {movie.genres.map(genre => (
-                  <span key={genre} className="genre-tag">{genre}</span>
+                {movie.genres.map((genre, index) => (
+                  <span key={index} className="genre-tag">
+                    {genre}
+                  </span>
                 ))}
               </div>
+
+
               <p className="movie-rating">Ocena: {movie.rating}/10</p>
               <p className="movie-description">{movie.description}</p>
               <div className="movie-actors">

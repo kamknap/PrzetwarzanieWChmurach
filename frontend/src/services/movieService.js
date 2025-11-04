@@ -145,3 +145,24 @@ async deleteMovie(movieId) {
 
 const movieService = new MovieService()
 export default movieService
+
+export const getMovies = async (page = 1, limit = 20) => {
+  try {
+    // Dodaj parametry paginacji
+    const response = await fetch(`${API_BASE_URL}/movies?skip=${(page-1)*limit}&limit=${limit}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch movies');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching movies:', error);
+    throw error;
+  }
+};
