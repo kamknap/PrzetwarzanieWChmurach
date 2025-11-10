@@ -141,6 +141,67 @@ async deleteMovie(movieId) {
   }
 }
 
+// =====================
+// 🔹 OBSŁUGA WYPOŻYCZEŃ
+// =====================
+
+async rentMovie(movieId) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/rent/${movieId}`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Błąd podczas wypożyczania filmu')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Error renting movie:', error)
+    throw error
+  }
+}
+
+async returnMovie(movieId) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/return/${movieId}`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Błąd podczas zwracania filmu')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Error returning movie:', error)
+    throw error
+  }
+}
+
+async getMyRentals() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/rentals/me`, {
+      method: 'GET',
+      headers: this.getAuthHeaders()
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Błąd podczas pobierania wypożyczeń')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Error fetching rentals:', error)
+    throw error
+  }
+}
+
 }
 
 const movieService = new MovieService()
@@ -166,3 +227,5 @@ export const getMovies = async (page = 1, limit = 20) => {
     throw error;
   }
 };
+
+

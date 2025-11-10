@@ -866,4 +866,149 @@ textarea:focus {
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   }
 }
-/* ...existing code... */
+
+/* Wypożyczanie / Zwrot filmów */
+.movie-user-actions {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: flex-start;
+  gap: 0.5rem;
+}
+
+.rent-btn {
+  padding: 0.5rem 1rem;
+  background-color: #10b981; /* zielony */
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.rent-btn:hover {
+  background-color: #059669;
+}
+
+.return-btn {
+  padding: 0.5rem 1rem;
+  background-color: #f59e0b; /* pomarańczowy */
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.return-btn:hover {
+  background-color: #d97706;
+}
+
+.my-rentals-container {
+  margin-top: 2rem;
+  padding: 1rem;
+}
+
+.rentals-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.rental-card {
+  background: #f9fafb;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  padding: 1rem;
+  transition: transform 0.2s ease;
+}
+
+.rental-card:hover {
+  transform: translateY(-2px);
+}
+
+.rental-card h3 {
+  margin-bottom: 0.5rem;
+  color: #111827;
+}
+
+.rental-card p {
+  margin: 0.25rem 0;
+}
+
+.status {
+  margin-top: 0.5rem;
+  font-weight: bold;
+}
+
+.status.active {
+  color: #10b981; /* zielony */
+}
+
+.status.returned {
+  color: #2563eb; /* niebieski */
+}
+
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+  min-width: 340px;
+  max-width: 600px;
+  max-height: 95vh;
+  overflow-y: auto;
+  position: relative;
+}
+.close-btn {
+  position: absolute;
+  top: 0.75rem;
+  right: 1rem;
+  font-size: 2rem;
+  background: none;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background-color 0.2s;
+}
+.close-btn:hover {
+  background-color: #f3f4f6;
+}
+
+.rental-btn {
+  padding: 0.5rem 1rem;
+  background-color: #3b82f6; /* intensywny niebieski, pasujący do linków i przycisków */
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: background-color 0.2s ease;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.4);
+}
+
+.rental-btn:hover {
+  background-color: #2563eb; /* ciemniejszy niebieski na hover */
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.6);
+}
+
+.rental-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
+}

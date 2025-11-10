@@ -3,6 +3,7 @@ import asyncio
 from functools import partial
 import httpx
 from datetime import datetime
+from datetime import timedelta
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Depends, status, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -46,44 +47,44 @@ app.add_middleware(
 # Globalne zasoby trzymane w app.state
 @app.on_event("startup")
 async def startup_event():
-    # MongoClient singleton z database.get_client
-    from database import get_client, get_db
     app.state.mongo_client = get_client()
     app.state.db = get_db(app.state.mongo_client)
 
-    
-
-    # w funkcji startup lub zaraz po połączeniu z bazą
+    # Tworzenie indeksów
     try:
-        await db.Movies.create_index([
-            ("title", "text"),
-            ("description", "text"),
-            ("director", "text"),
-            ("actors", "text")
-        ])
+        # Indeks tekstowy dla wyszukiwania (wszystkie potrzebne pola)
+        await run_blocking(
+            app.state.db.Movies.create_index,
+            [
+                ("title", "text"),
+                ("description", "text"),
+                ("director", "text"),
+                ("actors", "text")
+            ],
+            default_language="none",
+            background=True
+        )
         logger.info("Text index created successfully for Movies collection")
     except Exception as e:
         logger.warning(f"Could not create text index: {e}")
-# Stwórz indeksy (w tle) — mogą przyspieszyć zapytania filtrujące/szukające
+
     try:
         movies = app.state.db.Movies
-        # indeksy pola, plus text index dla wyszukiwania
-        movies.create_index([("year", 1)], background=True)
-        movies.create_index([("genres", 1)], background=True)
-        movies.create_index([("is_available", 1)], background=True)
-        # text index dla wyszukiwania w title/director/actors
-        movies.create_index(
-    [("title", "text"), ("director", "text"), ("actors", "text")],
-    default_language="none",
-    background=True
-)
+        # Indeksy dla innych pól - w tle
+        await run_blocking(movies.create_index, [("year", 1)], background=True)
+        await run_blocking(movies.create_index, [("genres", 1)], background=True)
+        await run_blocking(movies.create_index, [("is_available", 1)], background=True)
 
         logger.info("Mongo indexes ensured")
     except Exception as e:
         logger.warning(f"Could not create indexes at startup: {e}")
 
-    # httpx AsyncClient z connection pooling — będziemy go używać do komunikacji z auth service
-    app.state.http_client = httpx.AsyncClient(timeout=5.0, limits=httpx.Limits(max_keepalive_connections=10, max_connections=50))
+    # httpx AsyncClient z connection pooling na auth service
+    app.state.http_client = httpx.AsyncClient(
+        timeout=5.0,
+        limits=httpx.Limits(max_keepalive_connections=10, max_connections=50)
+    )
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -150,6 +151,17 @@ class MovieUpdate(BaseModel):
 # Funkcje pomocnicze
 def get_db_connection():
     return app.state.db
+
+def rental_to_dict(rental):
+    out = rental.copy()
+    out["_id"] = str(out["_id"])
+    if "rentalDate" in out:
+        out["rentalDate"] = out["rentalDate"].isoformat() if out["rentalDate"] else None
+    if "plannedReturnDate" in out:
+        out["plannedReturnDate"] = out["plannedReturnDate"].isoformat() if out["plannedReturnDate"] else None
+    if "actualReturnDate" in out and out["actualReturnDate"]:
+        out["actualReturnDate"] = out["actualReturnDate"].isoformat()
+    return out
 
 async def run_blocking(func, *args, **kwargs):
     loop = asyncio.get_event_loop()
@@ -444,31 +456,185 @@ async def update_movie(
 
     return movie_to_response(updated_movie)
 
-@app.delete("/movies/{movie_id}")
-async def delete_movie(
-    movie_id: str,
-    current_user: dict = Depends(require_admin)
+@app.get("/movies", response_model=MoviesListResponse)
+async def get_movies(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(10, ge=1, le=100),
+    genre: Optional[str] = Query(None),
+    year: Optional[int] = Query(None),
+    available_only: bool = Query(True),
+    search: Optional[str] = Query(None),
+    current_user: dict = Depends(verify_token)
 ):
-    """Usuwa film (tylko admin)"""
     db = get_db_connection()
-    
+    filter_query = {}
+
+    if available_only:
+        filter_query["is_available"] = True
+
+    if genre:
+        filter_query["genres"] = {"$in": [genre]}
+
+    if year is not None:
+        if year < 1800 or year > datetime.utcnow().year:
+            raise HTTPException(status_code=400, detail="Invalid year filter")
+        filter_query["year"] = year
+
+    if search:
+        # Wersja z indeksowanym wyszukiwaniem tekstowym
+        filter_query["$text"] = {"$search": search}
+        # Alternatywnie na tytuł:
+        # filter_query["title"] = {"$regex": search, "$options": "i"}
+
+    skip = (page - 1) * per_page
+
+    total = await run_blocking(db.Movies.count_documents, filter_query)
+    total_pages = (total + per_page - 1) // per_page
+
+    projection = {
+        "title": 1,
+        "year": 1,
+        "genres": 1,
+        "language": 1,
+        "country": 1,
+        "duration": 1,
+        "description": 1,
+        "director": 1,
+        "rating": 1,
+        "actors": 1,
+        "addedDate": 1,
+        "is_available": 1
+    }
+
+    cursor = db.Movies.find(filter_query, projection).skip(skip).limit(per_page).sort("addedDate", -1)
+    movies_list = await run_blocking(list, cursor)
+
+    movies = [movie_to_response(m) for m in movies_list]
+
+    result = MoviesListResponse(
+        movies=movies,
+        total=total,
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages
+    )
+
+    return result
+
+
+
+@app.post("/rent/{movie_id}")
+async def rent_movie(
+    movie_id: str,
+    current_user: dict = Depends(verify_token)
+):
+    db = get_db_connection()
+    user_id = str(current_user["id"])  # <-- POPRAWKA: bierz zawsze "id"
+
     try:
         object_id = ObjectId(movie_id)
-    except:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid movie ID format"
-        )
-    
-    result = await run_blocking(db.Movies.delete_one, {"_id": object_id})
-    
-    if result.deleted_count == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Movie not found"
-        )
-    
-    return {"message": "Movie deleted successfully"}
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid movie ID")
+
+    movie = await run_blocking(db.Movies.find_one, {"_id": object_id})
+    if not movie:
+        raise HTTPException(status_code=404, detail="Movie not found")
+
+    if not movie.get("is_available", True):
+        raise HTTPException(status_code=400, detail="Movie not available for rent")
+
+    # Sprawdź czy klient już wypożyczył ten film
+    existing = await run_blocking(
+        db.Rentals.find_one,
+        {"clientId": user_id, "movieId": movie_id, "status": "active"}
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="You already rented this movie")
+
+    now = datetime.utcnow()
+    rental = {
+        "clientId": user_id,
+        "movieId": movie_id,
+        "movieTitle": movie.get("title"),
+        "rentalDate": now,
+        "plannedReturnDate": now + timedelta(days=2),  # np. 2 dni wypożyczenia
+        "actualReturnDate": None,
+        "status": "active",
+    }
+
+    await run_blocking(db.Rentals.insert_one, rental)
+
+    # Zaktualizuj licznik aktywnych wypożyczeń klienta
+    await run_blocking(
+        db.Clients.update_one,
+        {"_id": ObjectId(user_id)},
+        {"$inc": {"activeRentalsCount": 1}}
+    )
+
+    # ustaw film jako niedostępny
+    await run_blocking(
+        db.Movies.update_one,
+        {"_id": object_id},
+        {"$set": {"is_available": False}}
+    )
+
+    return {"message": f"You rented '{movie.get('title')}' successfully"}
+
+
+@app.post("/return/{movie_id}")
+async def return_movie(
+    movie_id: str,
+    current_user: dict = Depends(verify_token)
+):
+    db = get_db_connection()
+    user_id = str(current_user["id"])  # <-- POPRAWKA: bierz zawsze "id"
+
+    rental = await run_blocking(
+        db.Rentals.find_one,
+        {"clientId": user_id, "movieId": movie_id, "status": "active"}
+    )
+    if not rental:
+        raise HTTPException(status_code=404, detail="No active rental found for this movie")
+
+    now = datetime.utcnow()
+
+    await run_blocking(
+        db.Rentals.update_one,
+        {"_id": rental["_id"]},
+        {"$set": {"status": "returned", "actualReturnDate": now}}
+    )
+
+    # Zaktualizuj licznik aktywnych wypożyczeń klienta
+    await run_blocking(
+        db.Clients.update_one,
+        {"_id": ObjectId(user_id)},
+        {"$inc": {"activeRentalsCount": -1}}
+    )
+
+    await run_blocking(
+        db.Movies.update_one,
+        {"_id": ObjectId(movie_id)},
+        {"$set": {"is_available": True}}
+    )
+
+    return {"message": "Movie returned successfully"}
+
+
+@app.get("/rentals/me")
+async def get_my_rentals(current_user: dict = Depends(verify_token)):
+    db = get_db_connection()
+    user_id = str(current_user["id"])
+    raw_rentals = await run_blocking(list, db.Rentals.find({"clientId": user_id}))
+    rentals = [rental_to_dict(r) for r in raw_rentals]
+    return rentals
+
+
+@app.get("/rentals", dependencies=[Depends(require_admin)])
+async def get_all_rentals():
+    db = get_db_connection()
+    rentals = await run_blocking(list, db.Rentals.find())
+    return rentals
+
 
 if __name__ == "__main__":
     import uvicorn

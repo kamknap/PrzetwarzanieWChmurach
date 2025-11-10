@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo } from 'react'
-import { useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import movieService from '../services/MovieService'
 import MovieManagement from './MovieManagement'
 import MovieEdit from './MovieEdit'
 import authService from '../services/authService'
+import MyRentals from './MyRentals'
 
 export default function MovieContainer() {
   const [movies, setMovies] = useState([])
@@ -12,99 +12,91 @@ export default function MovieContainer() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [genres, setGenres] = useState([])
-  const [filters, setFilters] = useState({
-    genre: '',
-    year: '',
-    search: ''
-  })
+  const [filters, setFilters] = useState({ genre: '', year: '', search: '' })
+  const [searchTerm, setSearchTerm] = useState('')
   const [showMovieManagement, setShowMovieManagement] = useState(false)
   const [editingMovie, setEditingMovie] = useState(null)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [showMyRentals, setShowMyRentals] = useState(false)
 
-  // 🔹 1. Uruchamia się tylko raz — przy starcie aplikacji
-useEffect(() => {
-  const init = async () => {
-    const user = authService.getUser()
-    setIsAdmin(user?.role === 'admin')
+  // 🔹 1. Inicjalizacja - raz po załadowaniu
+  useEffect(() => {
+    const init = async () => {
+      const user = authService.getUser()
+      setIsAdmin(user?.role === 'admin')
 
+      try {
+        const response = await movieService.getGenres()
+        setGenres(response.genres)
+      } catch (error) {
+        console.error('Error fetching genres:', error)
+      }
+
+      await fetchMovies(1, filters)
+    }
+
+    init()
+  }, [])
+
+  // 🔹 2. Debounce dla wyszukiwania (searchTerm → filters.search)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilters(prev => ({ ...prev, search: searchTerm }))
+      setCurrentPage(1)
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [searchTerm])
+
+  // 🔹 3. Reaguj na zmiany filtrów (oprócz searchTerm) lub paginacji
+  useEffect(() => {
+    // fetchMovies działa na aktualnych wartości filtra
+    fetchMovies(currentPage, filters)
+  }, [filters.genre, filters.year, currentPage])
+
+  const fetchMovies = async (page = 1, activeFilters = filters) => {
+    setLoading(true)
+    setError(null)
     try {
-      const response = await movieService.getGenres()
-      setGenres(response.genres)
+      const response = await movieService.getMovies({
+        page,
+        per_page: 12,
+        genre: filters.genre || undefined,
+        year: filters.year ? Number(filters.year) : undefined,
+        search: filters.search || undefined,
+        available_only: true,
+      })
+
+      setMovies(response.movies)
+      setTotalPages(response.total_pages)
     } catch (error) {
-      console.error('Error fetching genres:', error)
+      console.error('Detailed error fetching movies:', error)
+      setError(`Błąd podczas pobierania filmów: ${error.message}`)
+    } finally {
+      setLoading(false)
     }
-
-    // Po wczytaniu gatunków – pobierz pierwszą listę filmów
-    await fetchMovies()
   }
 
-  init()
-}, [])
+  const handleFilterChange = useCallback((key, value) => {
+    setFilters(prev => ({
+      ...prev,
+      [key]: value,
+    }))
+    setCurrentPage(1)
+  }, [])
 
-// 🔹 2. Reaguje na zmiany filtrów lub paginacji — z opóźnieniem (debounce)
-useEffect(() => {
-  const timeoutId = setTimeout(() => {
-    fetchMovies()
-  }, 500) // 0.5 sekundy od ostatniej zmiany
-
-  return () => clearTimeout(timeoutId)
-}, [currentPage, filters])
-
-const fetchMovies = async (page = currentPage, activeFilters = filters) => {
-  setLoading(true)
-  setError(null)
-
-  try {
-    const response = await movieService.getMovies({
-      page,
-      per_page: 12,
-      ...activeFilters
-    })
-
-    setMovies(response.movies)
-    setTotalPages(response.total_pages)
-  } catch (error) {
-    console.error('Detailed error fetching movies:', error)
-    setError(`Błąd podczas pobierania filmów: ${error.message}`)
-  } finally {
-    setLoading(false)
-  }
-}
-
-// reaguje tylko na interakcje użytkownika, nie na każdy render
-const fetchTimeout = useRef(null)
-
-const handleFilterChange = useCallback((key, value) => {
-  const newFilters = { ...filters, [key]: value }
-  setFilters(newFilters)
-  setCurrentPage(1)
-
-  // usuń poprzedni timeout (żeby nie odpytywać przy każdym znaku)
-  if (fetchTimeout.current) {
-    clearTimeout(fetchTimeout.current)
+  const handlePageChange = (page) => {
+    if (page < 1 || page > totalPages) return
+    setCurrentPage(page)
   }
 
-  // odczekaj 400 ms po ostatnim wpisaniu
-  fetchTimeout.current = setTimeout(() => {
-    fetchMovies(1, newFilters)
-  }, 400)
-}, [filters])
-
-const handlePageChange = (page) => {
-  setCurrentPage(page)
-  fetchMovies(page, filters)
-}
-
-
+  // Operacje admin
   const handleDelete = async (movieId, movieTitle) => {
-    if (!confirm(`Czy na pewno chcesz usunąć film "${movieTitle}"?`)) {
-      return
-    }
+    if (!window.confirm(`Czy na pewno chcesz usunąć film "${movieTitle}"?`)) return
 
     try {
       await movieService.deleteMovie(movieId)
       setError(null)
-      fetchMovies()
+      fetchMovies(currentPage, filters)
     } catch (error) {
       setError('Błąd usuwania filmu: ' + error.message)
     }
@@ -114,13 +106,33 @@ const handlePageChange = (page) => {
     setEditingMovie(movie)
   }
 
-  // Memoizacja ciężkich obliczeń
-  const processedMovies = useMemo(() => {
-    return movies.map(movie => ({
-      ...movie,
-      // Przetwarzanie danych tylko gdy się zmieniają
-    }))
-  }, [movies])
+  // Obsługa wypożyczeń
+  const handleRent = async (movieId, movieTitle) => {
+    if (!window.confirm(`Czy na pewno chcesz wypożyczyć film "${movieTitle}"?`)) return
+
+    try {
+      await movieService.rentMovie(movieId)
+      alert(`Film "${movieTitle}" został wypożyczony!`)
+      fetchMovies(currentPage, filters)
+    } catch (error) {
+      alert(error.message || 'Nie udało się wypożyczyć filmu')
+    }
+  }
+
+  const handleReturn = async (movieId, movieTitle) => {
+    if (!window.confirm(`Czy na pewno chcesz zwrócić film "${movieTitle}"?`)) return
+
+    try {
+      await movieService.returnMovie(movieId)
+      alert(`Film "${movieTitle}" został zwrócony!`)
+      fetchMovies(currentPage, filters)
+    } catch (error) {
+      alert(error.message || 'Nie udało się zwrócić filmu')
+    }
+  }
+
+  // Memoizacja przetworzonych filmów (jeśli planujesz rozszerzać)
+  const processedMovies = useMemo(() => movies, [movies])
 
   if (loading) {
     return (
@@ -132,18 +144,19 @@ const handlePageChange = (page) => {
 
   if (error) {
     return (
-      <div className="error-container">
+      <div className="error-message">
         <p>{error}</p>
-        <button onClick={fetchMovies}>Spróbuj ponownie</button>
+        <button onClick={() => fetchMovies(currentPage, filters)} className="submit-btn">Spróbuj ponownie</button>
       </div>
     )
   }
 
   return (
     <div className="movie-container">
+
       {isAdmin && (
         <div className="admin-movie-actions">
-          <button 
+          <button
             onClick={() => setShowMovieManagement(true)}
             className="admin-btn"
           >
@@ -152,50 +165,71 @@ const handlePageChange = (page) => {
         </div>
       )}
 
+      {!isAdmin && (
+        <div className="user-rental-actions">
+          <button
+            onClick={() => setShowMyRentals(true)}
+            className="rental-btn"
+          >
+            🎞 Moje wypożyczenia
+          </button>
+        </div>
+      )}
+
       <div className="movie-filters">
-        <div className="filter-group">
+
+        <div className="filter-group" style={{ flex: '1 1 300px' }}>
           <input
             type="text"
             placeholder="Szukaj filmów..."
-            value={filters.search}
-            onChange={(e) => handleFilterChange('search', e.target.value)}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
             className="search-input"
           />
         </div>
-        
-        <div className="filter-group">
+
+        <div className="filter-group" style={{ flex: '1 1 160px' }}>
           <select
             value={filters.genre}
             onChange={(e) => handleFilterChange('genre', e.target.value)}
             className="genre-select"
           >
             <option value="">Wszystkie gatunki</option>
-            {genres.map(genre => (
-              <option key={genre} value={genre}>{genre}</option>
+            {genres.map((genre) => (
+              <option key={genre} value={genre}>
+                {genre}
+              </option>
             ))}
           </select>
         </div>
 
-        <div className="filter-group">
+        <div className="filter-group" style={{ flex: '1 1 100px' }}>
           <input
             type="number"
             placeholder="Rok"
             value={filters.year}
             onChange={(e) => handleFilterChange('year', e.target.value)}
             className="year-input"
+            min="1800"
+            max={new Date().getFullYear()}
           />
         </div>
 
-        <button onClick={() => {
-          setFilters({ genre: '', year: '', search: '' })
-          setCurrentPage(1)
-        }} className="clear-filters-btn">
+        <button
+          onClick={() => {
+            setFilters({ genre: '', year: '', search: '' })
+            setSearchTerm('')
+            setCurrentPage(1)
+          }}
+          className="clear-filters-btn"
+          style={{ flex: '0 0 auto', height: '40px', alignSelf: 'center' }}
+        >
           Wyczyść filtry
         </button>
       </div>
 
       <div className="movies-grid">
-        {processedMovies.map(movie => (
+        {processedMovies.map((movie) => (
           <div key={movie.id} className="movie-card">
             <div className="movie-info">
               <h3 className="movie-title">{movie.title}</h3>
@@ -211,7 +245,6 @@ const handlePageChange = (page) => {
                 ))}
               </div>
 
-
               <p className="movie-rating">Ocena: {movie.rating}/10</p>
               <p className="movie-description">{movie.description}</p>
               <div className="movie-actors">
@@ -224,7 +257,27 @@ const handlePageChange = (page) => {
                   <span className="unavailable">Niedostępny</span>
                 )}
               </div>
-              
+
+              {!isAdmin && (
+                <div className="movie-user-actions">
+                  {movie.is_available ? (
+                    <button
+                      onClick={() => handleRent(movie.id, movie.title)}
+                      className="rent-btn"
+                    >
+                      🎬 Wypożycz
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleReturn(movie.id, movie.title)}
+                      className="return-btn"
+                    >
+                      🔁 Zwróć
+                    </button>
+                  )}
+                </div>
+              )}
+
               {isAdmin && (
                 <div className="movie-admin-actions">
                   <div className="action-buttons">
@@ -257,11 +310,11 @@ const handlePageChange = (page) => {
           >
             Poprzednia
           </button>
-          
+
           <span className="pagination-info">
             Strona {currentPage} z {totalPages}
           </span>
-          
+
           <button
             onClick={() => handlePageChange(currentPage + 1)}
             disabled={currentPage === totalPages}
@@ -273,9 +326,9 @@ const handlePageChange = (page) => {
       )}
 
       {showMovieManagement && (
-        <MovieManagement 
+        <MovieManagement
           onClose={() => setShowMovieManagement(false)}
-          onMovieChange={fetchMovies}
+          onMovieChange={() => fetchMovies(currentPage, filters)}
         />
       )}
 
@@ -283,8 +336,22 @@ const handlePageChange = (page) => {
         <MovieEdit
           movie={editingMovie}
           onClose={() => setEditingMovie(null)}
-          onMovieChange={fetchMovies}
+          onMovieChange={() => fetchMovies(currentPage, filters)}
         />
+      )}
+
+      {showMyRentals && (
+        <div className="overlay">
+          <div className="modal">
+            <button
+              onClick={() => setShowMyRentals(false)}
+              className="close-btn"
+            >
+              ✖
+            </button>
+            <MyRentals />
+          </div>
+        </div>
       )}
     </div>
   )
