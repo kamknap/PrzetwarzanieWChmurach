@@ -1,5 +1,4 @@
 import os
-import sys
 import hashlib
 from datetime import datetime, timedelta
 from typing import Optional
@@ -15,9 +14,8 @@ from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
 from dotenv import load_dotenv
 
-# Dodaj ścieżkę do shared
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'shared'))
-from database import get_client, get_db
+# Import z shared (teraz /app/shared dzięki PYTHONPATH=/app)
+from shared.database import get_client, get_db
 
 load_dotenv()
 

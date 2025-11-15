@@ -1,91 +1,78 @@
 version: '3.8'
 
 services:
-  # MongoDB - baza danych dla aplikacji
   mongodb:
     image: mongo:7.0
-    container_name: movie-rental-mongo
-    restart: unless-stopped
+    container_name: movies-mongodb
     ports:
       - "27017:27017"
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-admin}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-password123}
-      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-movie_rental}
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
     volumes:
       - mongodb_data:/data/db
     networks:
-      - movie-rental-network
+      - movies-network
 
-  # Auth Service - serwis uwierzytelniania (FastAPI)
   auth-service:
     build:
-      context: ./services/auth-service
-      dockerfile: Dockerfile
-    container_name: movie-rental-auth
-    restart: unless-stopped
+      context: .  # Build context to główny katalog projektu
+      dockerfile: services/auth-service/Dockerfile
+    container_name: auth-service
     ports:
       - "8000:8000"
     environment:
-      - MONGO_URL=${MONGO_URL:-mongodb://admin:password123@mongodb:27017/movie_rental?authSource=admin}
-      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
-      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
-      - JWT_EXPIRE_MINUTES=${JWT_EXPIRE_MINUTES:-30}
+      - MONGO_URI=mongodb+srv://jwas030716_db_user:PqWHxU4lDtXK8uUT@video.pnthizn.mongodb.net/
+      - MONGO_DATABASE=Video
+      - JWT_SECRET=your-secret-key-here
+      - JWT_ALGORITHM=HS256
+      - JWT_EXPIRE_MINUTES=30
     depends_on:
       - mongodb
     networks:
-      - movie-rental-network
-    # Odkomentuj gdy serwis będzie gotowy
-    # command: ["echo", "Auth service placeholder - not implemented yet"]
+      - movies-network
+    restart: unless-stopped
 
-  # Movies Service - serwis katalogu filmów (FastAPI)
   movies-service:
     build:
-      context: ./services/movies-service
-      dockerfile: Dockerfile
-    container_name: movie-rental-movies
-    restart: unless-stopped
+      context: .  # Build context to główny katalog projektu
+      dockerfile: services/movies-service/Dockerfile
+    container_name: movies-service
     ports:
       - "8001:8001"
     environment:
-      - MONGO_URL=${MONGO_URL:-mongodb://admin:password123@mongodb:27017/movie_rental?authSource=admin}
-      - AUTH_SERVICE_URL=${AUTH_SERVICE_URL:-http://auth-service:8000}
+      - MONGO_URI=mongodb+srv://jwas030716_db_user:PqWHxU4lDtXK8uUT@video.pnthizn.mongodb.net/
+      - MONGO_DATABASE=Video
+      - AUTH_SERVICE_URL=http://auth-service:8000
     depends_on:
       - mongodb
       - auth-service
     networks:
-      - movie-rental-network
-    # Odkomentuj gdy serwis będzie gotowy
-    # command: ["echo", "Movies service placeholder - not implemented yet"]
+      - movies-network
+    restart: unless-stopped
 
-  # Frontend - React + Vite (development)
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile.dev
-    container_name: movie-rental-frontend
-    restart: unless-stopped
+      dockerfile: Dockerfile
+      args:
+        # Te wartości będą użyte PODCZAS BUDOWANIA obrazu
+        # W Azure podmienisz na prawdziwe URLe (np. https://auth-service.azurecontainerapps.io)
+        VITE_AUTH_API: http://localhost:8000
+        VITE_MOVIES_API_URL: http://localhost:8001
+    container_name: movies-frontend
     ports:
-      - "5173:5173"
-    environment:
-      - VITE_AUTH_API=${VITE_AUTH_API:-http://localhost:8000}
-      - VITE_MOVIES_API=${VITE_MOVIES_API:-http://localhost:8001}
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - "80:80"
+    depends_on:
+      - auth-service
+      - movies-service
     networks:
-      - movie-rental-network
+      - movies-network
+    restart: unless-stopped
 
 volumes:
   mongodb_data:
-    driver: local
 
 networks:
-  movie-rental-network:
+  movies-network:
     driver: bridge
-
-# Użycie:
-# docker-compose up -d          # Uruchom wszystkie serwisy w tle
-# docker-compose up frontend    # Uruchom tylko frontend + zależności
-# docker-compose logs -f auth-service  # Pokaż logi serwisu auth
-# docker-compose down           # Zatrzymaj i usuń kontenery

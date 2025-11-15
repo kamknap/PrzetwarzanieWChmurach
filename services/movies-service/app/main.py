@@ -9,7 +9,6 @@ from fastapi import FastAPI, HTTPException, Depends, status, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import os
-import sys
 import requests
 from pydantic import BaseModel
 from pymongo import MongoClient
@@ -17,9 +16,8 @@ from bson import ObjectId
 from dotenv import load_dotenv
 
 
-# Dodaj ścieżkę do shared
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'shared'))
-from database import get_client, get_db
+# Import z shared (teraz /app/shared dzięki PYTHONPATH=/app)
+from shared.database import get_client, get_db
 
 load_dotenv()
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import movieService from '../services/MovieService'
+import movieService from '../services/movieService'
 import MovieManagement from './MovieManagement'
 import MovieEdit from './MovieEdit'
 import authService from '../services/authService'

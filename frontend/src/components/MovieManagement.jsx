@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import movieService from '../services/MovieService'
+import movieService from '../services/movieService'
 
 export default function MovieManagement({ onClose, onMovieChange }) {
   const [movieData, setMovieData] = useState({

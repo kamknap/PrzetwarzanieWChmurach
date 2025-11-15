@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import movieService from '../services/MovieService'
+import movieService from '../services/movieService'
 
 export default function MyRentals() {
   const [rentals, setRentals] = useState([])
