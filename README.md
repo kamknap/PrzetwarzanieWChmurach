@@ -71,13 +71,13 @@ docker-compose logs -f
 
 | Kategoria | Technologia | Status |
 |------------|--------------|--------|
-| ☁️ **Chmura** | Microsoft **Azure** | 🚧 Planowane |
-| 💻 **Backend** | **Python** + **FastAPI** | 🚧 Planowane |
+| ☁️ **Chmura** | Microsoft **Azure** | ✅ **Gotowe** (Container Apps) |
+| 💻 **Backend** | **Python** + **FastAPI** | ✅ **Gotowe** |
 | 🧠 **Frontend** | **React** + **Vite** | ✅ **Gotowe** |
-| 🗄️ **Baza danych** | **MongoDB** | 🚧 Planowane |
+| 🗄️ **Baza danych** | **MongoDB Atlas** | ✅ **Gotowe** (Cloud) |
 | 🔁 **CI/CD** | **GitHub Actions** | 🚧 Planowane |
 | 🧱 **IaC** | **Terraform** | 🚧 Planowane |
-| 🐳 **Konteneryzacja** | **Docker** | 🚧 W trakcie |
+| 🐳 **Konteneryzacja** | **Docker** | ✅ **Gotowe** (Multi-stage builds) |
 
 ---
 
@@ -114,19 +114,23 @@ Movies Service (FastAPI) ←→ MongoDB
 - [x] Frontend React + Vite
 - [x] Docker Compose dla lokalnego developmentu
 - [x] Konfiguracja środowiska (.env)
+- [x] Auth Service (FastAPI + JWT)
+- [x] Movies Service (FastAPI + MongoDB)
+- [x] Połączenie frontend ↔ backend
+- [x] **Pełna konteneryzacja (Docker)**
+- [x] **MongoDB Atlas (cloud database)**
+- [x] **Dokumentacja deployment do Azure**
 
 ### 🚧 W trakcie
-- [ ] Auth Service (FastAPI + JWT)
-- [ ] Movies Service (FastAPI + MongoDB)
-- [ ] Połączenie frontend ↔ backend
+- [ ] Deployment do Azure Container Apps (gotowa dokumentacja!)
 
 ### 📋 Planowane
 - [ ] Testy jednostkowe i integracyjne
 - [ ] CI/CD pipeline (GitHub Actions)
-- [ ] Wdrożenie na Azure (Container Instances)
 - [ ] Infrastruktura jako kod (Terraform)
-- [ ] Monitoring i logi
-- [ ] HTTPS i zabezpieczenia
+- [ ] Monitoring i logi w Azure
+- [ ] HTTPS i zabezpieczenia (auto w Azure)
+- [ ] Custom domain
 
 ---
 
@@ -168,9 +172,28 @@ docker-compose down
 
 ## 📚 Dokumentacja
 
+### Deployment do Azure
+Masz **DWA** sposoby wdrożenia aplikacji do Azure Container Apps:
+
+1. **🖱️ Azure Portal (GUI)** - [`AZURE_PORTAL_DEPLOYMENT.md`](AZURE_PORTAL_DEPLOYMENT.md)
+   - ✅ Wizualne, krok po kroku
+   - ✅ Świetne dla pierwszego razu
+   - ✅ Rozumiesz co się dzieje
+   - ⏱️ ~30 minut
+
+2. **⌨️ Azure CLI (Terminal)** - [`AZURE_DEPLOYMENT.md`](AZURE_DEPLOYMENT.md)
+   - ✅ Szybkie i powtarzalne
+   - ✅ Gotowe do automatyzacji
+   - ✅ Jedna komenda = deployment
+   - ⏱️ ~15 minut
+
+💡 **Rekomendacja**: Pierwszy raz użyj **Portal**, potem przejdź na **CLI**!
+
+### Inne dokumenty
 - [`frontend/README.md`](frontend/README.md) - Szczegóły frontendu
 - [`services/auth-service/README.md`](services/auth-service/README.md) - API uwierzytelniania
 - [`services/movies-service/README.md`](services/movies-service/README.md) - API filmów
+- [`docs/CONTAINERIZATION_SUMMARY.md`](docs/CONTAINERIZATION_SUMMARY.md) - Podsumowanie konteneryzacji
 - [`docs/`](docs/) - Diagramy architektury i decyzje projektowe
 
 ---

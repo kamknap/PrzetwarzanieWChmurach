@@ -1,4 +1,27 @@
-# 🚀 Deployment do Azure Container Apps
+# 🚀 Deployment do Azure Container Apps (Azure CLI)
+
+> **UWAGA**: Ten przewodnik używa **Azure CLI (komendy w terminalu)**. 
+> 
+> 📖 **Wolisz GUI?** Zobacz: [`AZURE_PORTAL_DEPLOYMENT.md`](./AZURE_PORTAL_DEPLOYMENT.md) - deployment przez przeglądarkę!
+
+---
+
+## 🎯 **Którą metodę wybrać?**
+
+| | Azure Portal (GUI) | Azure CLI (Terminal) |
+|---|-------------------|---------------------|
+| **Dla kogo?** | Początkujący, pierwszy raz | Doświadczeni, automatyzacja |
+| **Czas (pierwszy raz)** | ~30 minut | ~15 minut |
+| **Powtarzalność** | ❌ Trzeba klikać za każdym razem | ✅ Jeden skrypt dla wszystkiego |
+| **Uczenie się Azure** | ⭐⭐⭐⭐⭐ Wizualizacja | ⭐⭐⭐ Trzeba znać komendy |
+| **CI/CD** | ❌ Niemożliwe | ✅ Łatwe |
+| **Dokumentacja** | Screenshoty | ✅ Kopiuj-wklej komendy |
+
+**💡 Rekomendacja**: 
+- **Pierwszy deployment**: Użyj **Portal** (łatwiej zrozumieć)
+- **Drugi i kolejne**: Użyj **CLI** (szybciej)
+
+---
 
 ## 📋 Przygotowanie
 
