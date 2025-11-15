@@ -4,6 +4,9 @@ import MovieManagement from './MovieManagement'
 import MovieEdit from './MovieEdit'
 import authService from '../services/authService'
 import MyRentals from './MyRentals'
+import PendingReturns from './PendingReturns'
+import AllRentals from './AllRentals'
+import AdminRentMovie from './AdminRentMovie'
 
 export default function MovieContainer() {
   const [movies, setMovies] = useState([])
@@ -18,6 +21,9 @@ export default function MovieContainer() {
   const [editingMovie, setEditingMovie] = useState(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [showMyRentals, setShowMyRentals] = useState(false)
+  const [showPendingReturns, setShowPendingReturns] = useState(false)
+  const [showAllRentals, setShowAllRentals] = useState(false)
+  const [showAdminRentMovie, setShowAdminRentMovie] = useState(false)
 
   // 🔹 1. Inicjalizacja - raz po załadowaniu
   useEffect(() => {
@@ -51,7 +57,7 @@ export default function MovieContainer() {
   useEffect(() => {
     // fetchMovies działa na aktualnych wartości filtra
     fetchMovies(currentPage, filters)
-  }, [filters.genre, filters.year, currentPage])
+  }, [filters.genre, filters.year, filters.search, currentPage])
 
   const fetchMovies = async (page = 1, activeFilters = filters) => {
     setLoading(true)
@@ -60,9 +66,9 @@ export default function MovieContainer() {
       const response = await movieService.getMovies({
         page,
         per_page: 12,
-        genre: filters.genre || undefined,
-        year: filters.year ? Number(filters.year) : undefined,
-        search: filters.search || undefined,
+        genre: activeFilters.genre || undefined,
+        year: activeFilters.year ? Number(activeFilters.year) : undefined,
+        search: activeFilters.search || undefined,
         available_only: true,
       })
 
@@ -113,7 +119,8 @@ export default function MovieContainer() {
     try {
       await movieService.rentMovie(movieId)
       alert(`Film "${movieTitle}" został wypożyczony!`)
-      fetchMovies(currentPage, filters)
+      // Odśwież listę z aktualnymi filtrami
+      await fetchMovies(currentPage, filters)
     } catch (error) {
       alert(error.message || 'Nie udało się wypożyczyć filmu')
     }
@@ -125,7 +132,8 @@ export default function MovieContainer() {
     try {
       await movieService.returnMovie(movieId)
       alert(`Film "${movieTitle}" został zwrócony!`)
-      fetchMovies(currentPage, filters)
+      // Odśwież listę z aktualnymi filtrami
+      await fetchMovies(currentPage, filters)
     } catch (error) {
       alert(error.message || 'Nie udało się zwrócić filmu')
     }
@@ -161,6 +169,33 @@ export default function MovieContainer() {
             className="admin-btn"
           >
             + Dodaj nowy film
+          </button>
+          <button
+            onClick={() => setShowPendingReturns(true)}
+            className="admin-btn"
+            style={{ marginLeft: '1rem', backgroundColor: '#f59e0b' }}
+            onMouseEnter={(e) => e.target.style.backgroundColor = '#d97706'}
+            onMouseLeave={(e) => e.target.style.backgroundColor = '#f59e0b'}
+          >
+            🔄 Oczekujące zwroty
+          </button>
+          <button
+            onClick={() => setShowAllRentals(true)}
+            className="admin-btn"
+            style={{ marginLeft: '1rem', backgroundColor: '#8b5cf6' }}
+            onMouseEnter={(e) => e.target.style.backgroundColor = '#7c3aed'}
+            onMouseLeave={(e) => e.target.style.backgroundColor = '#8b5cf6'}
+          >
+            📋 Wszystkie wypożyczenia
+          </button>
+          <button
+            onClick={() => setShowAdminRentMovie(true)}
+            className="admin-btn"
+            style={{ marginLeft: '1rem', backgroundColor: '#10b981' }}
+            onMouseEnter={(e) => e.target.style.backgroundColor = '#059669'}
+            onMouseLeave={(e) => e.target.style.backgroundColor = '#10b981'}
+          >
+            🎬 Wypożycz dla klienta
           </button>
         </div>
       )}
@@ -352,6 +387,21 @@ export default function MovieContainer() {
             <MyRentals />
           </div>
         </div>
+      )}
+
+      {showPendingReturns && (
+        <PendingReturns onClose={() => setShowPendingReturns(false)} />
+      )}
+
+      {showAllRentals && (
+        <AllRentals onClose={() => setShowAllRentals(false)} />
+      )}
+
+      {showAdminRentMovie && (
+        <AdminRentMovie 
+          onClose={() => setShowAdminRentMovie(false)}
+          onRentalCreated={() => fetchMovies(currentPage, filters)}
+        />
       )}
     </div>
   )

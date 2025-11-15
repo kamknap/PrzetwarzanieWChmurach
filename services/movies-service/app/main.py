@@ -51,22 +51,23 @@ async def startup_event():
     app.state.db = get_db(app.state.mongo_client)
 
     # Tworzenie indeksów
-    try:
-        # Indeks tekstowy dla wyszukiwania (wszystkie potrzebne pola)
-        await run_blocking(
-            app.state.db.Movies.create_index,
-            [
-                ("title", "text"),
-                ("description", "text"),
-                ("director", "text"),
-                ("actors", "text")
-            ],
-            default_language="none",
-            background=True
-        )
-        logger.info("Text index created successfully for Movies collection")
-    except Exception as e:
-        logger.warning(f"Could not create text index: {e}")
+    # Zakomentowane - używamy regex zamiast $text, więc text index nie jest potrzebny
+    # try:
+    #     # Indeks tekstowy dla wyszukiwania (wszystkie potrzebne pola)
+    #     await run_blocking(
+    #         app.state.db.Movies.create_index,
+    #         [
+    #             ("title", "text"),
+    #             ("description", "text"),
+    #             ("director", "text"),
+    #             ("actors", "text")
+    #         ],
+    #         default_language="none",
+    #         background=True
+    #     )
+    #     logger.info("Text index created successfully for Movies collection")
+    # except Exception as e:
+    #     logger.warning(f"Could not create text index: {e}")
 
     try:
         movies = app.state.db.Movies
@@ -155,12 +156,22 @@ def get_db_connection():
 def rental_to_dict(rental):
     out = rental.copy()
     out["_id"] = str(out["_id"])
+    
+    # Konwertuj ObjectId na string dla clientId i movieId
+    if "clientId" in out and isinstance(out["clientId"], ObjectId):
+        out["clientId"] = str(out["clientId"])
+    if "movieId" in out and isinstance(out["movieId"], ObjectId):
+        out["movieId"] = str(out["movieId"])
+    
+    # Konwertuj daty na ISO format
     if "rentalDate" in out:
         out["rentalDate"] = out["rentalDate"].isoformat() if out["rentalDate"] else None
     if "plannedReturnDate" in out:
         out["plannedReturnDate"] = out["plannedReturnDate"].isoformat() if out["plannedReturnDate"] else None
     if "actualReturnDate" in out and out["actualReturnDate"]:
         out["actualReturnDate"] = out["actualReturnDate"].isoformat()
+    if "returnRequestDate" in out and out["returnRequestDate"]:
+        out["returnRequestDate"] = out["returnRequestDate"].isoformat()
     return out
 
 async def run_blocking(func, *args, **kwargs):
@@ -272,8 +283,8 @@ async def get_movies(
     if year:
         filter_query["year"] = year
     if search:
-        # wykorzystujemy text index jeśli istnieje
-        filter_query["$text"] = {"$search": search}
+        # Użyj regex dla wyszukiwania (case-insensitive)
+        filter_query["title"] = {"$regex": search, "$options": "i"}
 
     key = _cache_key(page=page, per_page=per_page, **filter_query)
 
@@ -536,6 +547,17 @@ async def rent_movie(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid movie ID")
 
+    # Sprawdź czy użytkownik nie przekroczył limitu 3 aktywnych wypożyczeń
+    active_rentals_count = await run_blocking(
+        db.Rentals.count_documents,
+        {"clientId": user_id, "status": "active"}
+    )
+    if active_rentals_count >= 3:
+        raise HTTPException(
+            status_code=400, 
+            detail="Osiągnięto limit 3 aktywnych wypożyczeń. Zwróć film, aby wypożyczyć kolejny."
+        )
+
     movie = await run_blocking(db.Movies.find_one, {"_id": object_id})
     if not movie:
         raise HTTPException(status_code=404, detail="Movie not found")
@@ -586,6 +608,7 @@ async def return_movie(
     movie_id: str,
     current_user: dict = Depends(verify_token)
 ):
+    """Zgłoś chęć zwrotu filmu - wymaga zatwierdzenia przez admina"""
     db = get_db_connection()
     user_id = str(current_user["id"])  # <-- POPRAWKA: bierz zawsze "id"
 
@@ -596,28 +619,14 @@ async def return_movie(
     if not rental:
         raise HTTPException(status_code=404, detail="No active rental found for this movie")
 
-    now = datetime.utcnow()
-
+    # Ustaw status na "pending_return" - oczekuje na zatwierdzenie przez admina
     await run_blocking(
         db.Rentals.update_one,
         {"_id": rental["_id"]},
-        {"$set": {"status": "returned", "actualReturnDate": now}}
+        {"$set": {"status": "pending_return", "returnRequestDate": datetime.utcnow()}}
     )
 
-    # Zaktualizuj licznik aktywnych wypożyczeń klienta
-    await run_blocking(
-        db.Clients.update_one,
-        {"_id": ObjectId(user_id)},
-        {"$inc": {"activeRentalsCount": -1}}
-    )
-
-    await run_blocking(
-        db.Movies.update_one,
-        {"_id": ObjectId(movie_id)},
-        {"$set": {"is_available": True}}
-    )
-
-    return {"message": "Movie returned successfully"}
+    return {"message": "Prośba o zwrot filmu została zgłoszona. Oczekuje na zatwierdzenie przez administratora."}
 
 
 @app.get("/rentals/me")
@@ -629,8 +638,322 @@ async def get_my_rentals(current_user: dict = Depends(verify_token)):
     return rentals
 
 
+@app.get("/rentals/pending")
+async def get_pending_returns(current_user: dict = Depends(require_admin)):
+    """Pobierz listę wypożyczeń oczekujących na zatwierdzenie zwrotu (tylko admin)"""
+    db = get_db_connection()
+    raw_rentals = await run_blocking(
+        list, 
+        db.Rentals.find({"status": "pending_return"}).sort("returnRequestDate", -1)
+    )
+    
+    # Wzbogać o dane klienta
+    rentals = []
+    for rental in raw_rentals:
+        rental_dict = rental_to_dict(rental)
+        
+        # Pobierz dane klienta
+        client = await run_blocking(
+            db.Clients.find_one,
+            {"_id": ObjectId(rental["clientId"])}
+        )
+        if client:
+            rental_dict["clientName"] = f"{client.get('firstName', '')} {client.get('lastName', '')}"
+            rental_dict["clientEmail"] = client.get("email", "")
+        
+        rentals.append(rental_dict)
+    
+    return rentals
+
+
+@app.post("/rentals/{rental_id}/approve")
+async def approve_return(
+    rental_id: str,
+    current_user: dict = Depends(require_admin)
+):
+    """Zatwierdź zwrot filmu (tylko admin)"""
+    db = get_db_connection()
+
+    try:
+        object_id = ObjectId(rental_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid rental ID")
+
+    rental = await run_blocking(db.Rentals.find_one, {"_id": object_id})
+    if not rental:
+        raise HTTPException(status_code=404, detail="Rental not found")
+
+    if rental.get("status") != "pending_return":
+        raise HTTPException(
+            status_code=400, 
+            detail="Rental is not pending return approval"
+        )
+
+    now = datetime.utcnow()
+    
+    # Zatwierdź zwrot
+    await run_blocking(
+        db.Rentals.update_one,
+        {"_id": object_id},
+        {"$set": {"status": "returned", "actualReturnDate": now}}
+    )
+
+    # Zaktualizuj licznik aktywnych wypożyczeń klienta
+    await run_blocking(
+        db.Clients.update_one,
+        {"_id": ObjectId(rental["clientId"])},
+        {"$inc": {"activeRentalsCount": -1}}
+    )
+
+    # Ustaw film jako dostępny
+    await run_blocking(
+        db.Movies.update_one,
+        {"_id": ObjectId(rental["movieId"])},
+        {"$set": {"is_available": True}}
+    )
+
+    return {"message": "Zwrot filmu został zatwierdzony"}
+
+
+@app.delete("/rentals/{rental_id}")
+async def delete_rental(
+    rental_id: str,
+    current_user: dict = Depends(verify_token)
+):
+    """Usuń wypożyczenie (tylko jeśli zostało zwrócone)"""
+    db = get_db_connection()
+    user_id = str(current_user["id"])
+
+    try:
+        object_id = ObjectId(rental_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid rental ID")
+
+    rental = await run_blocking(
+        db.Rentals.find_one,
+        {"_id": object_id, "clientId": user_id}
+    )
+    
+    if not rental:
+        raise HTTPException(status_code=404, detail="Rental not found")
+
+    # Sprawdź czy wypożyczenie zostało zwrócone
+    if rental.get("status") != "returned":
+        raise HTTPException(
+            status_code=400, 
+            detail="Cannot delete active rental. Please return the movie first."
+        )
+
+    # Usuń wypożyczenie z bazy
+    await run_blocking(db.Rentals.delete_one, {"_id": object_id})
+
+    return {"message": "Rental deleted successfully"}
+
+
+@app.get("/admin/rentals")
+async def get_all_rentals(
+    current_user: dict = Depends(require_admin),
+    search: Optional[str] = Query(None, description="Szukaj po imieniu, nazwisku, emailu, tytule filmu"),
+    sort_by: Optional[str] = Query("rentalDate", description="Sortuj po: rentalDate, clientName, movieTitle"),
+    sort_order: Optional[str] = Query("desc", description="asc lub desc"),
+    status_filter: Optional[str] = Query(None, description="Filtruj po statusie: active, pending_return, returned")
+):
+    """Pobierz wszystkie wypożyczenia z możliwością filtrowania i sortowania (tylko admin)"""
+    db = get_db_connection()
+    
+    # Buduj query
+    query = {}
+    if status_filter:
+        query["status"] = status_filter
+    
+    # Pobierz wszystkie wypożyczenia
+    raw_rentals = await run_blocking(list, db.Rentals.find(query))
+    
+    # Wzbogać o dane klienta i filmu
+    rentals = []
+    for rental in raw_rentals:
+        rental_dict = rental_to_dict(rental)
+        
+        # Pobierz dane klienta - obsłuż zarówno ObjectId jak i string
+        try:
+            client_id = rental["clientId"]
+            # Jeśli to już ObjectId, użyj bezpośrednio, jeśli string - konwertuj
+            if isinstance(client_id, str):
+                client_id = ObjectId(client_id)
+            
+            client = await run_blocking(
+                db.Clients.find_one,
+                {"_id": client_id}
+            )
+            if client:
+                rental_dict["clientFirstName"] = client.get("firstName", "")
+                rental_dict["clientLastName"] = client.get("lastName", "")
+                rental_dict["clientName"] = f"{client.get('firstName', '')} {client.get('lastName', '')}"
+                rental_dict["clientEmail"] = client.get("email", "")
+                rental_dict["clientPhone"] = client.get("phone", "")
+        except Exception as e:
+            logger.warning(f"Could not fetch client data: {e}")
+            rental_dict["clientName"] = "Nieznany klient"
+        
+        # Pobierz dane filmu - obsłuż zarówno ObjectId jak i string
+        try:
+            movie_id = rental["movieId"]
+            # Jeśli to już ObjectId, użyj bezpośrednio, jeśli string - konwertuj
+            if isinstance(movie_id, str):
+                movie_id = ObjectId(movie_id)
+                
+            movie = await run_blocking(
+                db.Movies.find_one,
+                {"_id": movie_id}
+            )
+            if movie:
+                rental_dict["movieTitle"] = movie.get("title", rental_dict.get("movieTitle", ""))
+                rental_dict["movieGenres"] = movie.get("genres", [])
+        except Exception as e:
+            logger.warning(f"Could not fetch movie data: {e}")
+        
+        rentals.append(rental_dict)
+    
+    # Filtrowanie po wyszukiwaniu
+    if search:
+        search_lower = search.lower()
+        rentals = [r for r in rentals if (
+            search_lower in r.get("clientFirstName", "").lower() or
+            search_lower in r.get("clientLastName", "").lower() or
+            search_lower in r.get("clientEmail", "").lower() or
+            search_lower in r.get("movieTitle", "").lower() or
+            search_lower in r.get("movieId", "")
+        )]
+    
+    # Sortowanie
+    reverse = (sort_order == "desc")
+    if sort_by == "clientName":
+        rentals.sort(key=lambda x: x.get("clientName", ""), reverse=reverse)
+    elif sort_by == "movieTitle":
+        rentals.sort(key=lambda x: x.get("movieTitle", ""), reverse=reverse)
+    else:  # domyślnie rentalDate
+        rentals.sort(key=lambda x: x.get("rentalDate", ""), reverse=reverse)
+    
+    return rentals
+
+
+@app.post("/admin/rent")
+async def admin_rent_movie(
+    movie_id: str,
+    client_identifier: str = Query(..., description="Email, ID klienta lub 'Imię Nazwisko'"),
+    current_user: dict = Depends(require_admin)
+):
+    """Wypożycz film dla klienta (tylko admin)"""
+    db = get_db_connection()
+    
+    # Znajdź klienta po email, ID lub imieniu+nazwisku
+    client = None
+    
+    # Sprawdź czy to ObjectId
+    try:
+        client = await run_blocking(
+            db.Clients.find_one,
+            {"_id": ObjectId(client_identifier)}
+        )
+    except:
+        pass
+    
+    # Sprawdź czy to email
+    if not client:
+        client = await run_blocking(
+            db.Clients.find_one,
+            {"email": client_identifier}
+        )
+    
+    # Sprawdź czy to imię i nazwisko
+    if not client and " " in client_identifier:
+        parts = client_identifier.strip().split(" ", 1)
+        if len(parts) == 2:
+            first_name, last_name = parts
+            client = await run_blocking(
+                db.Clients.find_one,
+                {"firstName": {"$regex": f"^{first_name}$", "$options": "i"},
+                 "lastName": {"$regex": f"^{last_name}$", "$options": "i"}}
+            )
+    
+    if not client:
+        raise HTTPException(status_code=404, detail="Klient nie znaleziony")
+    
+    client_id = str(client["_id"])
+    
+    # Sprawdź film
+    try:
+        movie_object_id = ObjectId(movie_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid movie ID")
+    
+    movie = await run_blocking(db.Movies.find_one, {"_id": movie_object_id})
+    if not movie:
+        raise HTTPException(status_code=404, detail="Film nie znaleziony")
+    
+    if not movie.get("is_available", True):
+        raise HTTPException(status_code=400, detail="Film nie jest dostępny do wypożyczenia")
+    
+    # Sprawdź limit wypożyczeń klienta
+    active_rentals_count = await run_blocking(
+        db.Rentals.count_documents,
+        {"clientId": client_id, "status": "active"}
+    )
+    if active_rentals_count >= 3:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Klient {client.get('firstName')} {client.get('lastName')} osiągnął limit 3 aktywnych wypożyczeń"
+        )
+    
+    # Sprawdź czy klient już wypożyczył ten film
+    existing = await run_blocking(
+        db.Rentals.find_one,
+        {"clientId": client_id, "movieId": movie_id, "status": "active"}
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="Klient już wypożyczył ten film")
+    
+    # Utwórz wypożyczenie
+    now = datetime.utcnow()
+    rental = {
+        "clientId": client_id,
+        "movieId": movie_id,
+        "movieTitle": movie.get("title"),
+        "rentalDate": now,
+        "plannedReturnDate": now + timedelta(days=2),
+        "actualReturnDate": None,
+        "status": "active",
+    }
+    
+    result = await run_blocking(db.Rentals.insert_one, rental)
+    
+    # Zaktualizuj licznik
+    await run_blocking(
+        db.Clients.update_one,
+        {"_id": ObjectId(client_id)},
+        {"$inc": {"activeRentalsCount": 1}}
+    )
+    
+    # Ustaw film jako niedostępny
+    await run_blocking(
+        db.Movies.update_one,
+        {"_id": movie_object_id},
+        {"$set": {"is_available": False}}
+    )
+    
+    return {
+        "message": f"Film '{movie.get('title')}' został wypożyczony dla klienta {client.get('firstName')} {client.get('lastName')}",
+        "rental_id": str(result.inserted_id),
+        "client": f"{client.get('firstName')} {client.get('lastName')}",
+        "movie": movie.get('title'),
+        "rentalDate": now.isoformat(),
+        "plannedReturnDate": (now + timedelta(days=2)).isoformat()
+    }
+
+
 @app.get("/rentals", dependencies=[Depends(require_admin)])
-async def get_all_rentals():
+async def get_all_rentals_old():
+    """Stary endpoint - zachowany dla kompatybilności"""
     db = get_db_connection()
     rentals = await run_blocking(list, db.Rentals.find())
     return rentals

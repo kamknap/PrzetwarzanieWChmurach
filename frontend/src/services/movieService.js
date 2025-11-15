@@ -202,6 +202,113 @@ async getMyRentals() {
   }
 }
 
+async deleteRental(rentalId) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/rentals/${rentalId}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders()
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Błąd podczas usuwania wypożyczenia')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Error deleting rental:', error)
+    throw error
+  }
+}
+
+async getPendingReturns() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/rentals/pending`, {
+      method: 'GET',
+      headers: this.getAuthHeaders()
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Błąd podczas pobierania oczekujących zwrotów')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Error fetching pending returns:', error)
+    throw error
+  }
+}
+
+async approveReturn(rentalId) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/rentals/${rentalId}/approve`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Błąd podczas zatwierdzania zwrotu')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Error approving return:', error)
+    throw error
+  }
+}
+
+async getAllRentals(params = {}) {
+  try {
+    const queryParams = new URLSearchParams()
+    
+    if (params.search) queryParams.append('search', params.search)
+    if (params.sort_by) queryParams.append('sort_by', params.sort_by)
+    if (params.sort_order) queryParams.append('sort_order', params.sort_order)
+    if (params.status_filter) queryParams.append('status_filter', params.status_filter)
+
+    const response = await fetch(`${API_BASE_URL}/admin/rentals?${queryParams}`, {
+      method: 'GET',
+      headers: this.getAuthHeaders()
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Błąd podczas pobierania wypożyczeń')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Error fetching all rentals:', error)
+    throw error
+  }
+}
+
+async adminRentMovie(movieId, clientIdentifier) {
+  try {
+    const queryParams = new URLSearchParams({
+      movie_id: movieId,
+      client_identifier: clientIdentifier
+    })
+
+    const response = await fetch(`${API_BASE_URL}/admin/rent?${queryParams}`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Błąd podczas wypożyczania filmu')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Error renting movie as admin:', error)
+    throw error
+  }
+}
+
 }
 
 const movieService = new MovieService()

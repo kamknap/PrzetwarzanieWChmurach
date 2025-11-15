@@ -31,6 +31,17 @@ export default function MyRentals() {
     }
   }
 
+  const handleDelete = async (rental) => {
+    if (!window.confirm(`Czy na pewno chcesz usunąć wypożyczenie "${rental.movieTitle}" z historii?`)) return
+    try {
+      await movieService.deleteRental(rental._id)
+      alert(`Wypożyczenie "${rental.movieTitle}" zostało usunięte z historii.`)
+      fetchRentals()
+    } catch (error) {
+      alert(error.message || 'Nie udało się usunąć wypożyczenia')
+    }
+  }
+
   useEffect(() => {
     fetchRentals()
   }, [])
@@ -63,8 +74,13 @@ export default function MyRentals() {
             {rental.actualReturnDate && (
               <p><strong>Zwrócono:</strong> {new Date(rental.actualReturnDate).toLocaleDateString()}</p>
             )}
-            <div style={{ marginTop: "0.75rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              {!rental.actualReturnDate && (
+            {rental.status === 'pending_return' && (
+              <p style={{ color: '#f59e0b', fontWeight: 'bold' }}>
+                ⏳ Oczekuje na zatwierdzenie zwrotu przez administratora
+              </p>
+            )}
+            <div style={{ marginTop: "0.75rem", display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+              {rental.status === 'active' && (
                 <button
                   className="return-btn"
                   style={{
@@ -83,7 +99,32 @@ export default function MyRentals() {
                   🔁 Zwróć film
                 </button>
               )}
-              <span className={`status ${rental.status}`}>{rental.status === 'active' ? 'Aktywne' : 'Zwrócone'}</span>
+              {rental.actualReturnDate && (
+                <button
+                  className="delete-btn"
+                  style={{
+                    padding: "0.5rem 1rem",
+                    backgroundColor: "#ef4444",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontWeight: 500,
+                    fontSize: "1rem",
+                    transition: "background-color 0.2s"
+                  }}
+                  onMouseEnter={(e) => e.target.style.backgroundColor = "#dc2626"}
+                  onMouseLeave={(e) => e.target.style.backgroundColor = "#ef4444"}
+                  onClick={() => handleDelete(rental)}
+                >
+                  🗑️ Usuń z historii
+                </button>
+              )}
+              <span className={`status ${rental.status}`}>
+                {rental.status === 'active' ? 'Aktywne' : 
+                 rental.status === 'pending_return' ? 'Oczekuje na zatwierdzenie' : 
+                 'Zwrócone'}
+              </span>
             </div>
           </div>
         ))}
