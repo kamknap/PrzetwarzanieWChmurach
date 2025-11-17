@@ -1,3 +1,24 @@
+# =====================================================
+# 🚀 Docker Compose dla GOTOWYCH obrazów z Docker Hub
+# =====================================================
+#
+# Ten plik jest dla osób, które mają uruchomić aplikację
+# używając gotowych obrazów (bez budowania z kodu).
+#
+# 📖 INSTRUKCJA: Zobacz QUICK_START_COLLEAGUE.md
+#
+# ⚙️ PRZED URUCHOMIENIEM:
+# 1. Zamień <TWOJA_NAZWA_DOCKER_HUB> na prawdziwą nazwę
+#    (w trzech miejscach: auth-service, movies-service, frontend)
+# 2. Uruchom: docker-compose -f docker-compose-pull.yml up -d
+#
+# 🔗 Dostęp po uruchomieniu:
+# - Frontend: http://localhost
+# - Auth API: http://localhost:8000/docs
+# - Movies API: http://localhost:8001/docs
+#
+# =====================================================
+
 services:
   mongodb:
     image: mongo:7.0
@@ -13,9 +34,8 @@ services:
       - movies-network
 
   auth-service:
-    build:
-      context: .  # Build context to główny katalog projektu
-      dockerfile: services/auth-service/Dockerfile
+    # UŻYJ SWOJEJ NAZWY DOCKER HUB!
+    image: kamilknapik/auth-service:latest
     container_name: auth-service
     ports:
       - "8000:8000"
@@ -32,9 +52,8 @@ services:
     restart: unless-stopped
 
   movies-service:
-    build:
-      context: .  # Build context to główny katalog projektu
-      dockerfile: services/movies-service/Dockerfile
+    # UŻYJ SWOJEJ NAZWY DOCKER HUB!
+    image: kamilknapik/movies-service:latest
     container_name: movies-service
     ports:
       - "8001:8001"
@@ -50,14 +69,8 @@ services:
     restart: unless-stopped
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        # Te wartości będą użyte PODCZAS BUDOWANIA obrazu
-        # W Azure podmienisz na prawdziwe URLe (np. https://auth-service.azurecontainerapps.io)
-        VITE_AUTH_API: http://localhost:8000
-        VITE_MOVIES_API_URL: http://localhost:8001
+    # UŻYJ SWOJEJ NAZWY DOCKER HUB!
+    image: kamilknapik/frontend:latest
     container_name: movies-frontend
     ports:
       - "80:80"
