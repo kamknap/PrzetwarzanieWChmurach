@@ -37,7 +37,7 @@ pipeline {
                     
                     // 2. Testy (To miejsce na przyszłe testy!)
                     // Uruchamiamy tymczasowy kontener, instalujemy pytest i wykonujemy testy
-                    // sh 'docker run --rm $ACR_URL/auth-service:${BUILD_NUMBER} sh -c "pip install pytest && pytest"' 
+                    sh 'docker run --rm $ACR_URL/auth-service:${BUILD_NUMBER} sh -c "pip install pytest && pytest"' 
                     echo 'Testy Auth Service pominięte (brak plików testowych)'
                 }
             }
