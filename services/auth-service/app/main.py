@@ -1,7 +1,9 @@
 import os
 import hashlib
+import asyncio
+from functools import partial
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, List
 from bson import ObjectId
 
 from fastapi import FastAPI, HTTPException, Depends, status
@@ -14,7 +16,7 @@ from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
 from dotenv import load_dotenv
 
-# Import z shared (teraz /app/shared dzięki PYTHONPATH=/app)
+# Import z shared
 from shared.database import get_client, get_db
 
 load_dotenv()
@@ -40,11 +42,50 @@ app = FastAPI(title="Auth Service", version="1.0.0")
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # W produkcji ustaw konkretne domeny
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- Helper do operacji blokujących (Mongo) ---
+async def run_blocking(func, *args, **kwargs):
+    loop = asyncio.get_event_loop()
+    p = partial(func, *args, **kwargs)
+    return await loop.run_in_executor(None, p)
+
+# --- ZDARZENIA STARTU I ZATRZYMANIA (Refactor) ---
+@app.on_event("startup")
+async def startup_event():
+    # 1. Łączymy się z bazą na starcie
+    app.state.mongo_client = get_client()
+    app.state.db = get_db(app.state.mongo_client)
+    
+    try:
+        # 2. Tworzymy unikalny indeks na email (TO JEST KLUCZOWE!)
+        # Dzięki temu baza sama pilnuje, żeby nie było duplikatów
+        await run_blocking(
+            app.state.db.Clients.create_index,
+            "email",
+            unique=True
+        )
+        print("Index on 'email' created/ensured.")
+    except Exception as e:
+        print(f"Warning: Could not create index: {e}")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    try:
+        app.state.mongo_client.close()
+    except Exception:
+        pass
+
+# Zmieniona funkcja - pobiera bazę ze stanu aplikacji
+def get_db_connection():
+    return app.state.db
+
+# --- RESZTA KODU BEZ ZMIAN ---
+# (Modele, Funkcje pomocnicze, Endpointy...)
 
 # Modele Pydantic
 class UserRegister(BaseModel):
@@ -115,31 +156,24 @@ class ClientUpdate(BaseModel):
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     if USE_BCRYPT:
         try:
-            # Bcrypt ma limit 72 bajtów, więc obcinamy hasło jeśli jest za długie
             if len(plain_password.encode('utf-8')) > 72:
                 plain_password = plain_password[:72]
             return pwd_context.verify(plain_password, hashed_password)
         except Exception:
-            # Fallback do SHA256
             pass
-    
-    # Prosty SHA256 jako fallback
-    salt = "video_rental_salt_2024"  # W produkcji użyj losowej soli dla każdego użytkownika
+    salt = "video_rental_salt_2024"
     hash_check = hashlib.sha256((plain_password + salt).encode()).hexdigest()
     return hash_check == hashed_password
 
 def get_password_hash(password: str) -> str:
     if USE_BCRYPT:
         try:
-            # Bcrypt ma limit 72 bajtów, więc obcinamy hasło jeśli jest za długie
             if len(password.encode('utf-8')) > 72:
                 password = password[:72]
             return pwd_context.hash(password)
         except Exception as e:
             print(f"Bcrypt failed, using SHA256: {e}")
-    
-    # Prosty SHA256 jako fallback
-    salt = "video_rental_salt_2024"  # W produkcji użyj losowej soli dla każdego użytkownika
+    salt = "video_rental_salt_2024"
     return hashlib.sha256((password + salt).encode()).hexdigest()
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
@@ -151,11 +185,6 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
     return encoded_jwt
-
-def get_db_connection():
-    client = get_client()
-    db = get_db(client)
-    return db
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     credentials_exception = HTTPException(
@@ -194,15 +223,13 @@ def read_root():
 async def register(user: UserRegister):
     db = get_db_connection()
     
-    # Sprawdź czy użytkownik już istnieje
-    existing_user = db.Clients.find_one({"email": user.email})
+    existing_user = await run_blocking(db.Clients.find_one, {"email": user.email})
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
         )
     
-    # Przygotuj dane użytkownika
     user_data = {
         "firstName": user.firstName,
         "lastName": user.lastName,
@@ -216,7 +243,7 @@ async def register(user: UserRegister):
     }
     
     try:
-        result = db.Clients.insert_one(user_data)
+        result = await run_blocking(db.Clients.insert_one, user_data)
         user_data["_id"] = result.inserted_id
     except DuplicateKeyError:
         raise HTTPException(
@@ -224,13 +251,11 @@ async def register(user: UserRegister):
             detail="Email already registered"
         )
     
-    # Utwórz token
     access_token_expires = timedelta(minutes=JWT_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.email}, expires_delta=access_token_expires
     )
     
-    # Przygotuj odpowiedź
     user_response = UserResponse(
         id=str(user_data["_id"]),
         firstName=user_data["firstName"],
@@ -253,8 +278,7 @@ async def register(user: UserRegister):
 async def login(user: UserLogin):
     db = get_db_connection()
     
-    # Znajdź użytkownika
-    db_user = db.Clients.find_one({"email": user.email})
+    db_user = await run_blocking(db.Clients.find_one, {"email": user.email})
     if not db_user or not verify_password(user.password, db_user["passwordHash"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -262,13 +286,11 @@ async def login(user: UserLogin):
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Utwórz token
     access_token_expires = timedelta(minutes=JWT_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.email}, expires_delta=access_token_expires
     )
     
-    # Przygotuj odpowiedź
     user_response = UserResponse(
         id=str(db_user["_id"]),
         firstName=db_user["firstName"],
@@ -316,245 +338,120 @@ async def update_profile(
     current_user: dict = Depends(get_current_user)
 ):
     db = get_db_connection()
-    
     update_fields = {}
+    if user_data.firstName: update_fields["firstName"] = user_data.firstName
+    if user_data.lastName: update_fields["lastName"] = user_data.lastName
+    if user_data.phone is not None: update_fields["phone"] = user_data.phone
+    if user_data.address is not None: update_fields["address"] = user_data.address
     
-    # Aktualizuj podstawowe dane
-    if user_data.firstName:
-        update_fields["firstName"] = user_data.firstName
-    if user_data.lastName:
-        update_fields["lastName"] = user_data.lastName
-    if user_data.phone is not None:
-        update_fields["phone"] = user_data.phone
-    if user_data.address is not None:
-        update_fields["address"] = user_data.address
-    
-    # Zmiana hasła
     if user_data.newPassword:
         if not user_data.currentPassword:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Current password is required to change password"
-            )
-        
-        # Weryfikuj aktualne hasło
+            raise HTTPException(status_code=400, detail="Current password required")
         if not verify_password(user_data.currentPassword, current_user["passwordHash"]):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Current password is incorrect"
-            )
-        
+            raise HTTPException(status_code=400, detail="Current password incorrect")
         update_fields["passwordHash"] = get_password_hash(user_data.newPassword)
     
-    # Aktualizuj w bazie
     if update_fields:
-        db.Clients.update_one(
-            {"_id": current_user["_id"]},
-            {"$set": update_fields}
-        )
+        await run_blocking(db.Clients.update_one, {"_id": current_user["_id"]}, {"$set": update_fields})
     
-    # Pobierz zaktualizowane dane
-    updated_user = db.Clients.find_one({"_id": current_user["_id"]})
+    updated_user = await run_blocking(db.Clients.find_one, {"_id": current_user["_id"]})
     
-    # Utwórz nowy token
-    access_token_expires = timedelta(minutes=JWT_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": updated_user["email"]}, expires_delta=access_token_expires
-    )
-    
-    user_response = UserResponse(
-        id=str(updated_user["_id"]),
-        firstName=updated_user["firstName"],
-        lastName=updated_user["lastName"],
-        email=updated_user["email"],
-        address=updated_user["address"],
-        phone=updated_user["phone"],
-        role=updated_user["role"],
-        registrationDate=updated_user["registrationDate"],
-        activeRentalsCount=updated_user["activeRentalsCount"]
-    )
+    access_token = create_access_token(data={"sub": updated_user["email"]}, expires_delta=timedelta(minutes=JWT_EXPIRE_MINUTES))
     
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "user": user_response
+        "user": UserResponse(
+            id=str(updated_user["_id"]),
+            firstName=updated_user["firstName"],
+            lastName=updated_user["lastName"],
+            email=updated_user["email"],
+            address=updated_user["address"],
+            phone=updated_user["phone"],
+            role=updated_user["role"],
+            registrationDate=updated_user["registrationDate"],
+            activeRentalsCount=updated_user["activeRentalsCount"]
+        )
     }
 
 @app.get("/clients", response_model=list[ClientResponse])
-async def get_all_clients(
-    current_user: dict = Depends(require_admin)
-):
-    """Pobiera listę wszystkich klientów (tylko admin)"""
+async def get_all_clients(current_user: dict = Depends(require_admin)):
     db = get_db_connection()
-    
-    clients = db.Clients.find({})
-    
+    clients_cursor = db.Clients.find({})
+    clients = await run_blocking(list, clients_cursor)
     return [
         ClientResponse(
-            id=str(client["_id"]),
-            firstName=client["firstName"],
-            lastName=client["lastName"],
-            email=client["email"],
-            address=client.get("address", ""),
-            phone=client.get("phone", ""),
-            role=client["role"],
-            registrationDate=client["registrationDate"],
-            activeRentalsCount=client.get("activeRentalsCount", 0)
-        )
-        for client in clients
+            id=str(c["_id"]), firstName=c["firstName"], lastName=c["lastName"],
+            email=c["email"], address=c.get("address", ""), phone=c.get("phone", ""),
+            role=c["role"], registrationDate=c["registrationDate"],
+            activeRentalsCount=c.get("activeRentalsCount", 0)
+        ) for c in clients
     ]
 
 @app.post("/clients", response_model=ClientResponse)
-async def create_client(
-    client_data: ClientCreate,
-    current_user: dict = Depends(require_admin)
-):
-    """Tworzy nowego klienta (tylko admin)"""
+async def create_client(client_data: ClientCreate, current_user: dict = Depends(require_admin)):
     db = get_db_connection()
+    existing = await run_blocking(db.Clients.find_one, {"email": client_data.email})
+    if existing: raise HTTPException(status_code=400, detail="Email already registered")
     
-    # Sprawdź czy użytkownik już istnieje
-    existing_user = db.Clients.find_one({"email": client_data.email})
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
-        )
-    
-    # Przygotuj dane klienta
     new_client = {
-        "firstName": client_data.firstName,
-        "lastName": client_data.lastName,
-        "email": client_data.email,
-        "passwordHash": get_password_hash(client_data.password),
-        "address": client_data.address,
-        "phone": client_data.phone,
-        "role": client_data.role,
-        "registrationDate": datetime.utcnow(),
-        "activeRentalsCount": 0
+        "firstName": client_data.firstName, "lastName": client_data.lastName,
+        "email": client_data.email, "passwordHash": get_password_hash(client_data.password),
+        "address": client_data.address, "phone": client_data.phone, "role": client_data.role,
+        "registrationDate": datetime.utcnow(), "activeRentalsCount": 0
     }
-    
     try:
-        result = db.Clients.insert_one(new_client)
-        new_client["_id"] = result.inserted_id
+        res = await run_blocking(db.Clients.insert_one, new_client)
+        new_client["_id"] = res.inserted_id
     except DuplicateKeyError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
-        )
+        raise HTTPException(status_code=400, detail="Email already registered")
     
     return ClientResponse(
-        id=str(new_client["_id"]),
-        firstName=new_client["firstName"],
-        lastName=new_client["lastName"],
-        email=new_client["email"],
-        address=new_client["address"],
-        phone=new_client["phone"],
-        role=new_client["role"],
-        registrationDate=new_client["registrationDate"],
+        id=str(new_client["_id"]), firstName=new_client["firstName"], lastName=new_client["lastName"],
+        email=new_client["email"], address=new_client["address"], phone=new_client["phone"],
+        role=new_client["role"], registrationDate=new_client["registrationDate"],
         activeRentalsCount=new_client["activeRentalsCount"]
     )
 
 @app.delete("/clients/{client_id}")
-async def delete_client(
-    client_id: str,
-    current_user: dict = Depends(require_admin)
-):
-    """Usuwa klienta (tylko admin)"""
+async def delete_client(client_id: str, current_user: dict = Depends(require_admin)):
     db = get_db_connection()
-    
-    # Nie pozwól usunąć samego siebie
     if str(current_user["_id"]) == client_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot delete your own account"
-        )
-    
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
     try:
-        from bson import ObjectId
-        result = db.Clients.delete_one({"_id": ObjectId(client_id)})
+        res = await run_blocking(db.Clients.delete_one, {"_id": ObjectId(client_id)})
     except:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid client ID format"
-        )
-    
-    if result.deleted_count == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Client not found"
-        )
-    
+        raise HTTPException(status_code=400, detail="Invalid client ID format")
+    if res.deleted_count == 0: raise HTTPException(status_code=404, detail="Client not found")
     return {"message": "Client deleted successfully"}
 
 @app.put("/clients/{client_id}", response_model=ClientResponse)
-async def update_client(
-    client_id: str,
-    client_data: ClientUpdate,
-    current_user: dict = Depends(require_admin)
-):
-    """Aktualizuje dane klienta (tylko admin)"""
+async def update_client(client_id: str, client_data: ClientUpdate, current_user: dict = Depends(require_admin)):
     db = get_db_connection()
+    try: oid = ObjectId(client_id)
+    except: raise HTTPException(status_code=400, detail="Invalid client ID format")
     
-    try:
-        object_id = ObjectId(client_id)
-    except:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid client ID format"
-        )
-    
-    # Sprawdź czy klient istnieje
-    existing_client = db.Clients.find_one({"_id": object_id})
-    if not existing_client:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Client not found"
-        )
+    existing = await run_blocking(db.Clients.find_one, {"_id": oid})
+    if not existing: raise HTTPException(status_code=404, detail="Client not found")
     
     update_fields = {}
-    
-    # Aktualizuj podstawowe dane
-    if client_data.firstName:
-        update_fields["firstName"] = client_data.firstName
-    if client_data.lastName:
-        update_fields["lastName"] = client_data.lastName
-    if client_data.phone is not None:
-        update_fields["phone"] = client_data.phone
-    if client_data.address is not None:
-        update_fields["address"] = client_data.address
+    if client_data.firstName: update_fields["firstName"] = client_data.firstName
+    if client_data.lastName: update_fields["lastName"] = client_data.lastName
+    if client_data.phone is not None: update_fields["phone"] = client_data.phone
+    if client_data.address is not None: update_fields["address"] = client_data.address
     if client_data.role is not None:
-        # Nie pozwól zmienić swojej własnej roli
-        if str(current_user["_id"]) == client_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot change your own role"
-            )
+        if str(current_user["_id"]) == client_id: raise HTTPException(status_code=400, detail="Cannot change your own role")
         update_fields["role"] = client_data.role
+    if client_data.newPassword: update_fields["passwordHash"] = get_password_hash(client_data.newPassword)
     
-    # Zmiana hasła (bez wymagania starego hasła dla admina)
-    if client_data.newPassword:
-        update_fields["passwordHash"] = get_password_hash(client_data.newPassword)
-    
-    # Aktualizuj w bazie
-    if update_fields:
-        db.Clients.update_one(
-            {"_id": object_id},
-            {"$set": update_fields}
-        )
-    
-    # Pobierz zaktualizowane dane
-    updated_client = db.Clients.find_one({"_id": object_id})
+    if update_fields: await run_blocking(db.Clients.update_one, {"_id": oid}, {"$set": update_fields})
+    updated = await run_blocking(db.Clients.find_one, {"_id": oid})
     
     return ClientResponse(
-        id=str(updated_client["_id"]),
-        firstName=updated_client["firstName"],
-        lastName=updated_client["lastName"],
-        email=updated_client["email"],
-        address=updated_client["address"],
-        phone=updated_client["phone"],
-        role=updated_client["role"],
-        registrationDate=updated_client["registrationDate"],
-        activeRentalsCount=updated_client["activeRentalsCount"]
+        id=str(updated["_id"]), firstName=updated["firstName"], lastName=updated["lastName"],
+        email=updated["email"], address=updated["address"], phone=updated["phone"],
+        role=updated["role"], registrationDate=updated["registrationDate"],
+        activeRentalsCount=updated["activeRentalsCount"]
     )
 
 if __name__ == "__main__":
