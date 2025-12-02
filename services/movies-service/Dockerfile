@@ -14,6 +14,8 @@ COPY services/shared ./shared
 # Kopiuj kod aplikacji
 COPY services/movies-service/app/ ./app/
 
+COPY services/movies-service/tests/ ./tests/
+
 # Dodaj /app do PYTHONPATH żeby Python znalazł moduł 'shared'
 ENV PYTHONPATH=/app
 
