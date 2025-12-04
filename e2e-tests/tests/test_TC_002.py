@@ -2,6 +2,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 import uuid
 import time
 from config import BASE_URL, TEST_USER_EMAIL, TEST_USER_PASSWORD, TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD
@@ -170,12 +171,17 @@ def test_login_rent_return_movie_valid(driver):
     except:
         pass
 
+    try:
+        wait.until(EC.presence_of_element_located((By.CLASS_NAME, "loading-container")))
+        wait.until(EC.invisibility_of_element_located((By.CLASS_NAME, "loading-container")))
+    except TimeoutException:
+        time.sleep(0.5)
+
     close_waiting_rentals_btn = wait.until(
         EC.presence_of_element_located((By.CLASS_NAME, "close-btn"))
     )
     close_waiting_rentals_btn.click()
 
-    #wylogowanie
 
     logout_btn = wait.until(
         EC.presence_of_element_located((By.CLASS_NAME, "logout-btn"))
