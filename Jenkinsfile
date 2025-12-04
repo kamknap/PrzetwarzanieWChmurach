@@ -105,5 +105,39 @@ pipeline {
                 }
             }
         }
+
+        stage('E2E Tests') {
+            steps {
+                script {
+                    echo '🧪 --- [E2E] Uruchamianie testów end-to-end ---'
+                    
+                    // Czekamy chwilę na pełne wdrożenie aplikacji
+                    sh 'sleep 30'
+                    
+                    // Instalujemy zależności i uruchamiamy testy e2e
+                    sh '''
+                        cd e2e-tests
+                        pip install -r requirements.txt
+                        
+                        # Instalacja ChromeDriver
+                        apt-get update && apt-get install -y wget unzip
+                        wget https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_linux64.zip
+                        unzip chromedriver_linux64.zip
+                        chmod +x chromedriver
+                        mv chromedriver /usr/local/bin/
+                        
+                        # Instalacja Chrome
+                        wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add -
+                        echo "deb http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list
+                        apt-get update && apt-get install -y google-chrome-stable
+                        
+                        # Uruchomienie testów
+                        pytest tests/ -v --tb=short
+                    '''
+                    
+                    echo '✅ --- [E2E] Testy zakończone sukcesem! ---'
+                }
+            }
+        }
     }
 }
