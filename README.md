@@ -204,36 +204,6 @@ docker-compose down
 
 ---
 
-## 📚 Dokumentacja
-
-### Deployment do Azure
-Masz **DWA** sposoby wdrożenia aplikacji do Azure Container Apps:
-
-1. **🖱️ Azure Portal (GUI)** - [`AZURE_PORTAL_DEPLOYMENT.md`](AZURE_PORTAL_DEPLOYMENT.md)
-   - ✅ Wizualne, krok po kroku
-   - ✅ Świetne dla pierwszego razu
-   - ✅ Rozumiesz co się dzieje
-   - ⏱️ ~30 minut
-
-2. **⌨️ Azure CLI (Terminal)** - [`AZURE_DEPLOYMENT.md`](AZURE_DEPLOYMENT.md)
-   - ✅ Szybkie i powtarzalne
-   - ✅ Gotowe do automatyzacji
-   - ✅ Jedna komenda = deployment
-   - ⏱️ ~15 minut
-
-💡 **Rekomendacja**: Pierwszy raz użyj **Portal**, potem przejdź na **CLI**!
-
-### Inne dokumenty
-- [`START_HERE.md`](START_HERE.md) - Szybki start (3 kroki!)
-- [`frontend/README.md`](frontend/README.md) - Szczegóły frontendu
-- [`services/auth-service/README.md`](services/auth-service/README.md) - API uwierzytelniania
-- [`services/movies-service/README.md`](services/movies-service/README.md) - API filmów
-- [`e2e-tests/`](e2e-tests/) - Testy end-to-end
-- [`docs/CONTAINERIZATION_SUMMARY.md`](docs/CONTAINERIZATION_SUMMARY.md) - Podsumowanie konteneryzacji
-- [`docs/`](docs/) - Diagramy architektury i decyzje projektowe
-
----
-
 ## 👥 Zespół projektowy
 
 - 🧑‍💻 **Jan Wąs**
