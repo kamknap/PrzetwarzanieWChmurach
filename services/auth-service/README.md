@@ -23,14 +23,15 @@ JWT_EXPIRE_MINUTES=30
 ### 3. Uruchomienie serwera
 
 ```bash
-# Z katalogu auth-service
-python main.py
+# Z katalogu auth-service (zalecane)
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Lub bezpośrednio:
+Lub uruchom bezpośrednio z katalogu app/:
 
 ```bash
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+cd app
+python main.py
 ```
 
 Serwer będzie dostępny pod adresem: `http://localhost:8000`

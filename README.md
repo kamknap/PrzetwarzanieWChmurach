@@ -8,17 +8,49 @@ Projekt realizowany w ramach przedmiotu *Przetwarzanie w Chmurach*.
 ## 📁 Struktura projektu
 
 ```
-movie-rental/
-├─ frontend/                  # ✅ React + Vite (gotowy)
+PrzetwarzanieWChmurach/
+├─ frontend/                     # ✅ React + Vite
+│  ├─ src/                       # Kod źródłowy React
+│  ├─ Dockerfile                 # Produkcyjny build
+│  ├─ Dockerfile.dev             # Build deweloperski
+│  └─ package.json
 ├─ services/
-│  ├─ auth-service/          # 🚧 FastAPI - uwierzytelnianie (planowany)
-│  └─ movies-service/        # 🚧 FastAPI - katalog filmów (planowany)
-├─ infra/                    # 🚧 Infrastruktura jako kod (Terraform)
-├─ .github/workflows/        # 🚧 CI/CD (GitHub Actions)
-├─ docs/                     # 📚 Dokumentacja projektu
-├─ docker-compose.yml        # 🐳 Środowisko deweloperskie
-├─ .env.example              # ⚙️ Przykładowe zmienne środowiskowe
-└─ README.md                 # 📖 Ten plik
+│  ├─ auth-service/             # ✅ FastAPI - uwierzytelnianie
+│  │  ├─ app/
+│  │  │  └─ main.py
+│  │  ├─ tests/
+│  │  ├─ Dockerfile
+│  │  ├─ requirements.txt
+│  │  └─ README.md
+│  ├─ movies-service/           # ✅ FastAPI - katalog filmów
+│  │  ├─ app/
+│  │  │  └─ main.py
+│  │  ├─ tests/
+│  │  ├─ Dockerfile
+│  │  ├─ requirements.txt
+│  │  └─ README.md
+│  └─ shared/                   # ✅ Współdzielone moduły
+│     ├─ __init__.py
+│     └─ database.py            # Połączenie z MongoDB
+├─ e2e-tests/                   # ✅ Testy end-to-end
+│  ├─ tests/
+│  ├─ pages/
+│  ├─ Dockerfile
+│  └─ requirements.txt
+├─ infra/                       # � Dokumentacja infrastruktury
+│  └─ README.md
+├─ .github/
+│  └─ workflows/                # ⚠️ CI/CD (GitHub Actions - pusty)
+├─ docs/                        # 📚 Dokumentacja projektu
+├─ docker-compose.yml           # 🐳 Środowisko deweloperskie
+├─ docker-compose-pull.yml      # 🐳 Deployment z Docker Hub
+├─ .env                         # ⚙️ Zmienne środowiskowe (NIE commitować!)
+├─ .env.example                 # ⚙️ Przykładowe zmienne
+├─ Jenkinsfile                  # 🔧 Pipeline CI/CD (Jenkins)
+├─ AZURE_DEPLOYMENT.md          # ☁️ Deployment do Azure (CLI)
+├─ AZURE_PORTAL_DEPLOYMENT.md   # ☁️ Deployment do Azure (Portal)
+├─ START_HERE.md                # 🚀 Szybki start
+└─ README.md                    # 📖 Ten plik
 ```
 
 ---
@@ -75,6 +107,8 @@ docker-compose logs -f
 | 💻 **Backend** | **Python** + **FastAPI** | ✅ **Gotowe** |
 | 🧠 **Frontend** | **React** + **Vite** | ✅ **Gotowe** |
 | 🗄️ **Baza danych** | **MongoDB Atlas** | ✅ **Gotowe** (Cloud) |
+| 🧪 **Testy E2E** | **Playwright/Selenium** | ✅ **Gotowe** |
+| 🔄 **CI/CD** | **Jenkins** | ✅ **Gotowe** (Jenkinsfile) |
 | 🔁 **CI/CD** | **GitHub Actions** | 🚧 Planowane |
 | 🧱 **IaC** | **Terraform** | 🚧 Planowane |
 | 🐳 **Konteneryzacja** | **Docker** | ✅ **Gotowe** (Multi-stage builds) |
@@ -144,7 +178,7 @@ python -m venv venv
 source venv/bin/activate  # Linux/Mac
 # lub: venv\Scripts\activate  # Windows
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+python -m uvicorn app.main:app --reload --port 8000
 ```
 
 ### Dla deweloperów frontend
@@ -190,9 +224,11 @@ Masz **DWA** sposoby wdrożenia aplikacji do Azure Container Apps:
 💡 **Rekomendacja**: Pierwszy raz użyj **Portal**, potem przejdź na **CLI**!
 
 ### Inne dokumenty
+- [`START_HERE.md`](START_HERE.md) - Szybki start (3 kroki!)
 - [`frontend/README.md`](frontend/README.md) - Szczegóły frontendu
 - [`services/auth-service/README.md`](services/auth-service/README.md) - API uwierzytelniania
 - [`services/movies-service/README.md`](services/movies-service/README.md) - API filmów
+- [`e2e-tests/`](e2e-tests/) - Testy end-to-end
 - [`docs/CONTAINERIZATION_SUMMARY.md`](docs/CONTAINERIZATION_SUMMARY.md) - Podsumowanie konteneryzacji
 - [`docs/`](docs/) - Diagramy architektury i decyzje projektowe
 

@@ -53,12 +53,12 @@ source venv/bin/activate
 ### 3. Zainstaluj zależności
 
 ```bash
-pip install -r app/requirements.txt
+pip install -r requirements.txt
 ```
 
 ### 4. Konfiguracja środowiska
 
-Upewnij się, że plik `.env` w katalogu `services/` zawiera:
+Upewnij się, że plik `.env` w głównym katalogu projektu zawiera:
 
 ```env
 # MongoDB Atlas Connection
