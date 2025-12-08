@@ -154,12 +154,15 @@ Movies Service (FastAPI) ←→ MongoDB
 - [x] **Pełna konteneryzacja (Docker)**
 - [x] **MongoDB Atlas (cloud database)**
 - [x] **Dokumentacja deployment do Azure**
+- [x] **Deployment do Azure Container Apps**
+- [x] **Testy E2E (end-to-end)**
+- [x] **CI/CD pipeline (Jenkins)**
+- [x] **Docker Hub deployment workflow**
 
-### 🚧 W trakcie
-- [ ] Deployment do Azure Container Apps (gotowa dokumentacja!)
+### � W trakcie
+- Brak aktywnych zadań
 
 ### 📋 Planowane
-- [ ] Testy jednostkowe i integracyjne
 - [ ] CI/CD pipeline (GitHub Actions)
 - [ ] Infrastruktura jako kod (Terraform)
 - [ ] Monitoring i logi w Azure
