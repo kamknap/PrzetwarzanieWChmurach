@@ -201,19 +201,6 @@ docker-compose down
 
 ---
 
-## ❓ FAQ
-
-**Q: Czy mogę uruchomić tylko frontend?**  
-A: Tak! `cd frontend && npm run dev` - backend nie jest jeszcze wymagany.
-
-**Q: Gdzie są prawdziwe sekrety?**  
-A: W produkcji będą w Azure Key Vault. Lokalnie używaj `.env` (nie commituj!).
-
-**Q: Jak dodać nowy serwis?**  
-A: Utwórz folder w `services/`, dodaj do `docker-compose.yml`, zaktualizuj dokumentację.
-
----
-
 ## 📄 Licencja
 
 Projekt akademicki – tylko do celów edukacyjnych.
