@@ -109,8 +109,6 @@ docker-compose logs -f
 | 🗄️ **Baza danych** | **MongoDB Atlas** | ✅ **Gotowe** (Cloud) |
 | 🧪 **Testy E2E** | **Playwright/Selenium** | ✅ **Gotowe** |
 | 🔄 **CI/CD** | **Jenkins** | ✅ **Gotowe** (Jenkinsfile) |
-| 🔁 **CI/CD** | **GitHub Actions** | 🚧 Planowane |
-| 🧱 **IaC** | **Terraform** | 🚧 Planowane |
 | 🐳 **Konteneryzacja** | **Docker** | ✅ **Gotowe** (Multi-stage builds) |
 
 ---
@@ -158,17 +156,6 @@ Movies Service (FastAPI) ←→ MongoDB
 - [x] **Testy E2E (end-to-end)**
 - [x] **CI/CD pipeline (Jenkins)**
 - [x] **Docker Hub deployment workflow**
-
-### � W trakcie
-- Brak aktywnych zadań
-
-### 📋 Planowane
-- [ ] CI/CD pipeline (GitHub Actions)
-- [ ] Infrastruktura jako kod (Terraform)
-- [ ] Monitoring i logi w Azure
-- [ ] HTTPS i zabezpieczenia (auto w Azure)
-- [ ] Custom domain
-
 ---
 
 ## 🔧 Rozwój projektu
