@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import movieService from '../services/movieService'
 import MovieManagement from './MovieManagement'
 import MovieEdit from './MovieEdit'
@@ -15,8 +15,14 @@ export default function MovieContainer() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [genres, setGenres] = useState([])
+  
+  // Stan "zatwierdzony" (używany do pobierania danych)
   const [filters, setFilters] = useState({ genre: '', year: '', search: '' })
+  
+  // Stan "roboczy" formularzy (do wpisywania)
   const [searchTerm, setSearchTerm] = useState('')
+  const [yearSearch, setYearSearch] = useState('') // Nowy stan dla roku
+
   const [showMovieManagement, setShowMovieManagement] = useState(false)
   const [editingMovie, setEditingMovie] = useState(null)
   const [isAdmin, setIsAdmin] = useState(false)
@@ -25,7 +31,7 @@ export default function MovieContainer() {
   const [showAllRentals, setShowAllRentals] = useState(false)
   const [showAdminRentMovie, setShowAdminRentMovie] = useState(false)
 
-  // 🔹 1. Inicjalizacja - raz po załadowaniu
+  // 🔹 1. Inicjalizacja
   useEffect(() => {
     const init = async () => {
       const user = authService.getUser()
@@ -44,18 +50,24 @@ export default function MovieContainer() {
     init()
   }, [])
 
-  // 🔹 2. Debounce dla wyszukiwania (searchTerm → filters.search)
+  // 🔹 2. Debounce dla wyszukiwania TYTUŁU i ROKU
+  // Czeka 500ms po ostatnim naciśnięciu klawisza zanim zaktualizuje filtry
   useEffect(() => {
     const timer = setTimeout(() => {
-      setFilters(prev => ({ ...prev, search: searchTerm }))
-      setCurrentPage(1)
+      setFilters(prev => ({ 
+        ...prev, 
+        search: searchTerm,
+        year: yearSearch 
+      }))
+      if (searchTerm !== filters.search || yearSearch !== filters.year) {
+        setCurrentPage(1)
+      }
     }, 500)
     return () => clearTimeout(timer)
-  }, [searchTerm])
+  }, [searchTerm, yearSearch])
 
-  // 🔹 3. Reaguj na zmiany filtrów (oprócz searchTerm) lub paginacji
+  // 🔹 3. Pobieranie danych po zmianie zatwierdzonych filtrów
   useEffect(() => {
-    // fetchMovies działa na aktualnych wartości filtra
     fetchMovies(currentPage, filters)
   }, [filters.genre, filters.year, filters.search, currentPage])
 
@@ -82,10 +94,11 @@ export default function MovieContainer() {
     }
   }
 
-  const handleFilterChange = useCallback((key, value) => {
+  // Obsługa Selecta (Gatunek) - działa natychmiast
+  const handleGenreChange = useCallback((value) => {
     setFilters(prev => ({
       ...prev,
-      [key]: value,
+      genre: value,
     }))
     setCurrentPage(1)
   }, [])
@@ -119,7 +132,6 @@ export default function MovieContainer() {
     try {
       await movieService.rentMovie(movieId)
       alert(`Film "${movieTitle}" został wypożyczony!`)
-      // Odśwież listę z aktualnymi filtrami
       await fetchMovies(currentPage, filters)
     } catch (error) {
       alert(error.message || 'Nie udało się wypożyczyć filmu')
@@ -132,50 +144,29 @@ export default function MovieContainer() {
     try {
       await movieService.returnMovie(movieId)
       alert(`Film "${movieTitle}" został zwrócony!`)
-      // Odśwież listę z aktualnymi filtrami
       await fetchMovies(currentPage, filters)
     } catch (error) {
       alert(error.message || 'Nie udało się zwrócić filmu')
     }
   }
 
-  // Memoizacja przetworzonych filmów (jeśli planujesz rozszerzać)
   const processedMovies = useMemo(() => movies, [movies])
 
-  if (loading) {
-    return (
-      <div className="loading-container">
-        <p>Ładowanie filmów...</p>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="error-message">
-        <p>{error}</p>
-        <button onClick={() => fetchMovies(currentPage, filters)} className="submit-btn">Spróbuj ponownie</button>
-      </div>
-    )
-  }
+  // --- RENDERING (Zmiana: Nie używamy wczesnego return dla loading/error) ---
 
   return (
     <div className="movie-container">
 
+      {/* --- Sekcja Przycisków (zawsze widoczna) --- */}
       {isAdmin && (
         <div className="admin-movie-actions">
-          <button
-            onClick={() => setShowMovieManagement(true)}
-            className="admin-btn"
-          >
+          <button onClick={() => setShowMovieManagement(true)} className="admin-btn">
             + Dodaj nowy film
           </button>
           <button
             onClick={() => setShowPendingReturns(true)}
             className="admin-btn"
             style={{ marginLeft: '1rem', backgroundColor: '#f59e0b' }}
-            onMouseEnter={(e) => e.target.style.backgroundColor = '#d97706'}
-            onMouseLeave={(e) => e.target.style.backgroundColor = '#f59e0b'}
           >
             🔄 Oczekujące zwroty
           </button>
@@ -183,8 +174,6 @@ export default function MovieContainer() {
             onClick={() => setShowAllRentals(true)}
             className="admin-btn"
             style={{ marginLeft: '1rem', backgroundColor: '#8b5cf6' }}
-            onMouseEnter={(e) => e.target.style.backgroundColor = '#7c3aed'}
-            onMouseLeave={(e) => e.target.style.backgroundColor = '#8b5cf6'}
           >
             📋 Wszystkie wypożyczenia
           </button>
@@ -192,8 +181,6 @@ export default function MovieContainer() {
             onClick={() => setShowAdminRentMovie(true)}
             className="admin-btn"
             style={{ marginLeft: '1rem', backgroundColor: '#10b981' }}
-            onMouseEnter={(e) => e.target.style.backgroundColor = '#059669'}
-            onMouseLeave={(e) => e.target.style.backgroundColor = '#10b981'}
           >
             🎬 Wypożycz dla klienta
           </button>
@@ -202,22 +189,19 @@ export default function MovieContainer() {
 
       {!isAdmin && (
         <div className="user-rental-actions">
-          <button
-            onClick={() => setShowMyRentals(true)}
-            className="rental-btn"
-          >
+          <button onClick={() => setShowMyRentals(true)} className="rental-btn">
             🎞 Moje wypożyczenia
           </button>
         </div>
       )}
 
+      {/* --- Sekcja Filtrów (zawsze widoczna - to naprawia problem focusu) --- */}
       <div className="movie-filters">
-
         <div className="filter-group" style={{ flex: '1 1 300px' }}>
           <input
             type="text"
             placeholder="Szukaj filmów..."
-            value={searchTerm}
+            value={searchTerm} // Używamy lokalnego stanu
             onChange={(e) => setSearchTerm(e.target.value)}
             className="search-input"
           />
@@ -226,7 +210,7 @@ export default function MovieContainer() {
         <div className="filter-group" style={{ flex: '1 1 160px' }}>
           <select
             value={filters.genre}
-            onChange={(e) => handleFilterChange('genre', e.target.value)}
+            onChange={(e) => handleGenreChange(e.target.value)}
             className="genre-select"
           >
             <option value="">Wszystkie gatunki</option>
@@ -242,8 +226,8 @@ export default function MovieContainer() {
           <input
             type="number"
             placeholder="Rok"
-            value={filters.year}
-            onChange={(e) => handleFilterChange('year', e.target.value)}
+            value={yearSearch} // Używamy lokalnego stanu
+            onChange={(e) => setYearSearch(e.target.value)}
             className="year-input"
             min="1800"
             max={new Date().getFullYear()}
@@ -254,6 +238,7 @@ export default function MovieContainer() {
           onClick={() => {
             setFilters({ genre: '', year: '', search: '' })
             setSearchTerm('')
+            setYearSearch('')
             setCurrentPage(1)
           }}
           className="clear-filters-btn"
@@ -263,103 +248,109 @@ export default function MovieContainer() {
         </button>
       </div>
 
-      <div className="movies-grid">
-        {processedMovies.map((movie) => (
-          <div key={movie.id} className="movie-card">
-            <div className="movie-info">
-              <h3 className="movie-title">{movie.title}</h3>
-              <p className="movie-year">{movie.year}</p>
-              <p className="movie-director">Reżyseria: {movie.director}</p>
-              <p className="movie-duration">{movie.duration} min</p>
-              
-              <div className="movie-genres">
-                {movie.genres.map((genre, index) => (
-                  <span key={index} className="genre-tag">
-                    {genre}
-                  </span>
-                ))}
-              </div>
-
-              <p className="movie-rating">Ocena: {movie.rating}/10</p>
-              <p className="movie-description">{movie.description}</p>
-              <div className="movie-actors">
-                <strong>Obsada:</strong> {movie.actors.join(', ')}
-              </div>
-              <div className="movie-availability">
-                {movie.is_available ? (
-                  <span className="available">Dostępny</span>
-                ) : (
-                  <span className="unavailable">Niedostępny</span>
-                )}
-              </div>
-
-              {!isAdmin && (
-                <div className="movie-user-actions">
-                  {movie.is_available ? (
-                    <button
-                      onClick={() => handleRent(movie.id, movie.title)}
-                      className="rent-btn"
-                    >
-                      🎬 Wypożycz
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleReturn(movie.id, movie.title)}
-                      className="return-btn"
-                    >
-                      🔁 Zwróć
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {isAdmin && (
-                <div className="movie-admin-actions">
-                  <div className="action-buttons">
-                    <button
-                      onClick={() => handleEdit(movie)}
-                      className="edit-btn"
-                    >
-                      Edytuj
-                    </button>
-                    <button
-                      onClick={() => handleDelete(movie.id, movie.title)}
-                      className="delete-movie-btn"
-                    >
-                      Usuń
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {totalPages > 1 && (
-        <div className="pagination">
-          <button
-            onClick={() => handlePageChange(currentPage - 1)}
-            disabled={currentPage === 1}
-            className="pagination-btn"
-          >
-            Poprzednia
-          </button>
-
-          <span className="pagination-info">
-            Strona {currentPage} z {totalPages}
-          </span>
-
-          <button
-            onClick={() => handlePageChange(currentPage + 1)}
-            disabled={currentPage === totalPages}
-            className="pagination-btn"
-          >
-            Następna
+      {/* --- Sekcja Treści (Zmienia się w zależności od stanu) --- */}
+      
+      {loading ? (
+        <div className="loading-container">
+          <p>Ładowanie filmów...</p>
+        </div>
+      ) : error ? (
+        <div className="error-message">
+          <p>{error}</p>
+          <button onClick={() => fetchMovies(currentPage, filters)} className="submit-btn">
+            Spróbuj ponownie
           </button>
         </div>
+      ) : (
+        <>
+          <div className="movies-grid">
+            {processedMovies.map((movie) => (
+              <div key={movie.id} className="movie-card">
+                <div className="movie-info">
+                  <h3 className="movie-title">{movie.title}</h3>
+                  <p className="movie-year">{movie.year}</p>
+                  <p className="movie-director">Reżyseria: {movie.director}</p>
+                  <p className="movie-duration">{movie.duration} min</p>
+                  
+                  <div className="movie-genres">
+                    {movie.genres.map((genre, index) => (
+                      <span key={index} className="genre-tag">
+                        {genre}
+                      </span>
+                    ))}
+                  </div>
+
+                  <p className="movie-rating">Ocena: {movie.rating}/10</p>
+                  <p className="movie-description">{movie.description}</p>
+                  <div className="movie-actors">
+                    <strong>Obsada:</strong> {movie.actors.join(', ')}
+                  </div>
+                  <div className="movie-availability">
+                    {movie.is_available ? (
+                      <span className="available">Dostępny</span>
+                    ) : (
+                      <span className="unavailable">Niedostępny</span>
+                    )}
+                  </div>
+
+                  {!isAdmin && (
+                    <div className="movie-user-actions">
+                      {movie.is_available ? (
+                        <button onClick={() => handleRent(movie.id, movie.title)} className="rent-btn">
+                          🎬 Wypożycz
+                        </button>
+                      ) : (
+                        <button onClick={() => handleReturn(movie.id, movie.title)} className="return-btn">
+                          🔁 Zwróć
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {isAdmin && (
+                    <div className="movie-admin-actions">
+                      <div className="action-buttons">
+                        <button onClick={() => handleEdit(movie)} className="edit-btn">
+                          Edytuj
+                        </button>
+                        <button onClick={() => handleDelete(movie.id, movie.title)} className="delete-movie-btn">
+                          Usuń
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {totalPages > 1 && (
+            <div className="pagination">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="pagination-btn"
+              >
+                Poprzednia
+              </button>
+
+              <span className="pagination-info">
+                Strona {currentPage} z {totalPages}
+              </span>
+
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="pagination-btn"
+              >
+                Następna
+              </button>
+            </div>
+          )}
+        </>
       )}
 
+      {/* --- Modale --- */}
       {showMovieManagement && (
         <MovieManagement
           onClose={() => setShowMovieManagement(false)}
@@ -378,25 +369,14 @@ export default function MovieContainer() {
       {showMyRentals && (
         <div className="overlay">
           <div className="modal">
-            <button
-              onClick={() => setShowMyRentals(false)}
-              className="close-btn"
-            >
-              ✖
-            </button>
+            <button onClick={() => setShowMyRentals(false)} className="close-btn">✖</button>
             <MyRentals />
           </div>
         </div>
       )}
 
-      {showPendingReturns && (
-        <PendingReturns onClose={() => setShowPendingReturns(false)} />
-      )}
-
-      {showAllRentals && (
-        <AllRentals onClose={() => setShowAllRentals(false)} />
-      )}
-
+      {showPendingReturns && <PendingReturns onClose={() => setShowPendingReturns(false)} />}
+      {showAllRentals && <AllRentals onClose={() => setShowAllRentals(false)} />}
       {showAdminRentMovie && (
         <AdminRentMovie 
           onClose={() => setShowAdminRentMovie(false)}
