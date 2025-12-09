@@ -560,7 +560,7 @@ async def rent_movie(
         "movieId": movie_id,
         "movieTitle": movie.get("title"),
         "rentalDate": now,
-        "plannedReturnDate": now + timedelta(days=2),  # np. 2 dni wypożyczenia
+        "plannedReturnDate": now + timedelta(days=2),  # 2 dni wypożyczenia
         "actualReturnDate": None,
         "status": "active",
     }

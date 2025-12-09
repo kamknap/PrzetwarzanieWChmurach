@@ -686,8 +686,8 @@ textarea:focus {
 /* Grid Layout */
 .movies-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); 
+  align-items: stretch; 
 }
 
 /* Individual Movie Card */
@@ -699,6 +699,10 @@ textarea:focus {
   padding: 1.5rem;
   transition: transform 0.2s, box-shadow 0.2s;
   border: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  height: 100%; /* Karta zajmuje 100% wysokości komórki grida */
+  box-sizing: border-box; /* Upewnia się, że padding nie psuje wymiarów */
 }
 
 .movie-card:hover {
@@ -707,6 +711,12 @@ textarea:focus {
 }
 
 /* Movie Info */
+.movie-info {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1; /* Rozciąga ten kontener, aby wypełnił kartę */
+}
+
 .movie-info h3 {
   margin-top: 0;
   margin-bottom: 0.25rem;
@@ -733,6 +743,14 @@ textarea:focus {
   color: #6b7280;
   font-size: 0.9rem;
   line-height: 1.4;
+  
+  /* --- Opcjonalnie: Przytnij opis do np. 4 linii, żeby karty były równiejsze --- */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-grow: 1; /* Wypycha treść, ale pozwala przyciskom być na dole */
 }
 
 /* Genres */
@@ -868,11 +886,20 @@ textarea:focus {
 }
 
 /* Wypożyczanie / Zwrot filmów */
-.movie-user-actions {
-  margin-top: 1rem;
+.movie-user-actions,
+.movie-admin-actions {
+  /* --- NOWE WŁAŚCIWOŚCI --- */
+  margin-top: auto; /* To jest klucz! Wypycha przyciski na sam dół karty */
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb; /* Przesunięty border tutaj dla estetyki */
   display: flex;
-  justify-content: flex-start;
+  justify-content: flex-start; /* Lub space-between */
   gap: 0.5rem;
+}
+
+/* Poprawka dla admin actions, bo w oryginale miały margin-top */
+.movie-admin-actions {
+  justify-content: flex-end;
 }
 
 .rent-btn {
