@@ -16,7 +16,7 @@ from bson import ObjectId
 from dotenv import load_dotenv
 
 
-# Import z shared (teraz /app/shared dzięki PYTHONPATH=/app)
+# Import z shared 
 from shared.database import get_client, get_db
 
 load_dotenv()
@@ -33,7 +33,7 @@ security = HTTPBearer()
 
 app = FastAPI(title="Movies Service", version="1.0.0")
 
-# CORS jak wcześniej...
+# CORS Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -49,23 +49,6 @@ async def startup_event():
     app.state.db = get_db(app.state.mongo_client)
 
     # Tworzenie indeksów
-    # Zakomentowane - używamy regex zamiast $text, więc text index nie jest potrzebny
-    # try:
-    #     # Indeks tekstowy dla wyszukiwania (wszystkie potrzebne pola)
-    #     await run_blocking(
-    #         app.state.db.Movies.create_index,
-    #         [
-    #             ("title", "text"),
-    #             ("description", "text"),
-    #             ("director", "text"),
-    #             ("actors", "text")
-    #         ],
-    #         default_language="none",
-    #         background=True
-    #     )
-    #     logger.info("Text index created successfully for Movies collection")
-    # except Exception as e:
-    #     logger.warning(f"Could not create text index: {e}")
 
     try:
         movies = app.state.db.Movies
@@ -161,7 +144,7 @@ def rental_to_dict(rental):
     if "movieId" in out and isinstance(out["movieId"], ObjectId):
         out["movieId"] = str(out["movieId"])
     
-    # Konwertuj daty na ISO format
+    # Konwertuj daty na ISO
     if "rentalDate" in out:
         out["rentalDate"] = out["rentalDate"].isoformat() if out["rentalDate"] else None
     if "plannedReturnDate" in out:
@@ -259,7 +242,7 @@ _cache_lock = asyncio.Lock()
 CACHE_TTL = 5  # seconds
 
 def _cache_key(**kwargs):
-    # proste kluczowanie - dobierz według potrzeb (page/per_page/filters)
+    # proste kluczowanie
     return str(sorted(kwargs.items()))
 
 @app.get("/movies", response_model=MoviesListResponse)
@@ -281,7 +264,7 @@ async def get_movies(
     if year:
         filter_query["year"] = year
     if search:
-        # Użyj regex dla wyszukiwania (case-insensitive)
+        # Użyj regex dla wyszukiwania
         filter_query["title"] = {"$regex": search, "$options": "i"}
 
     key = _cache_key(page=page, per_page=per_page, **filter_query)
@@ -294,11 +277,11 @@ async def get_movies(
 
     skip = (page - 1) * per_page
 
-    # policz total i pobierz filmy w executorze (pymongo sync)
+    # policz total i pobierz filmy w executorze 
     total = await run_blocking(db.Movies.count_documents, filter_query)
     total_pages = (total + per_page - 1) // per_page
 
-    # projekcja - tylko potrzebne pola (zmniejsza transfer)
+    # projekcja - tylko potrzebne pola
     projection = {
         "title": 1,
         "year": 1,
@@ -925,7 +908,7 @@ async def admin_rent_movie(
     
     result = await run_blocking(db.Rentals.insert_one, rental)
     
-    # Zaktualizuj licznik
+    # Zaktualizuj licznik wypożyczeń klienta
     await run_blocking(
         db.Clients.update_one,
         {"_id": ObjectId(client_id)},
@@ -955,6 +938,49 @@ async def get_all_rentals_old():
     db = get_db_connection()
     rentals = await run_blocking(list, db.Rentals.find())
     return rentals
+
+
+@app.delete("/movies/{movie_id}")
+async def delete_movie(
+    movie_id: str,
+    current_user: dict = Depends(require_admin)
+):
+    """Usuwa film, o ile nie ma aktywnych wypożyczeń (tylko admin)"""
+    db = get_db_connection()
+
+    try:
+        object_id = ObjectId(movie_id)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid movie ID format"
+        )
+
+    # Sprawdzenie, czy film ma aktywne wypożyczenia
+    active_rentals = await run_blocking(
+        db.Rentals.count_documents,
+        {"movieId": movie_id, "status": "active"}
+    )
+    
+    if active_rentals > 0:
+        # Obsługa błędu - film ma aktywne wypożyczenia
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete movie: it currently has active rentals."
+        )
+
+    # Usunięcie filmu
+    # Używamy delete_one, bo _id jest unikalne
+    result = await run_blocking(db.Movies.delete_one, {"_id": object_id})
+
+    # Obsługa błędu - czy film w ogóle istniał
+    if result.deleted_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Movie not found"
+        )
+    
+    return {"message": "Movie deleted successfully"}
 
 
 if __name__ == "__main__":
