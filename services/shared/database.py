@@ -18,7 +18,7 @@ def get_client(uri: Optional[str] = None) -> MongoClient:
     uri = uri or os.getenv("MONGO_URI") or os.getenv("MONGO_URL")
     if not uri:
         raise RuntimeError("Brak MONGO_URI/MONGO_URL w środowisku (.env)")
-    # serverSelectionTimeoutMS krótszy, ale i tak klient jest singletonem
+    
     _mongo_client = MongoClient(uri, serverSelectionTimeoutMS=5000)
     return _mongo_client
 

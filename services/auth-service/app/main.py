@@ -62,7 +62,7 @@ async def startup_event():
     app.state.db = get_db(app.state.mongo_client)
     
     try:
-        # 2. Tworzymy unikalny indeks na email (TO JEST KLUCZOWE!)
+        # 2. Tworzymy unikalny indeks na email
         # Dzięki temu baza sama pilnuje, żeby nie było duplikatów
         await run_blocking(
             app.state.db.Clients.create_index,
@@ -84,8 +84,8 @@ async def shutdown_event():
 def get_db_connection():
     return app.state.db
 
-# --- RESZTA KODU BEZ ZMIAN ---
-# (Modele, Funkcje pomocnicze, Endpointy...)
+
+# Modele, Funkcje pomocnicze, Endpointy
 
 # Modele Pydantic
 class UserRegister(BaseModel):
